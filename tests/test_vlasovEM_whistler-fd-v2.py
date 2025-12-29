@@ -302,7 +302,8 @@ v_map_key = flags.get('v_map_key', 'B')
 
 save_every_nt = flags.get('save_every_nt', 100)
 
-upwind = True if te_order in [1, 3, 66, 68, 69, 86, 88, 89] else False
+# upwind = True if te_order in [1, 3, 66, 68, 69, 86, 88, 89] else False
+upwind = flags.get('do_upwind', False)
 upwind_EM = False  # True
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
@@ -848,6 +849,9 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt ) == 0:
+
+        print('HERE')
+        pdb.set_trace()
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

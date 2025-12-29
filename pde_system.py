@@ -775,7 +775,7 @@ class PDE_system:
                                                  solver_type=LocalSolverType.TDCross,
                                                  compress_level_2=4, **kwargs)
 
-        ###
+        ### mixed td-drmg + tdvp
         elif 90 <= te_order < 100:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:

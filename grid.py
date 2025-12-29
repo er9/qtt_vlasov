@@ -55,6 +55,7 @@ class Grid:
         self.axIDs = tuple([ax.coordinate for ax in self.axes])
 
         ## to calculate
+        self._mps_xmultiply = {}
         self._mpo_xmultiply = {}
         self._tn_elem_multiply = {}
         self._mpo_firstderivatives = {}
@@ -926,6 +927,65 @@ class Grid:
     ###############################################
     ### build derivative and integral operators ###
     ###############################################
+
+    def get_xmultiply_mps(self, x_axes: Sequence['Axis'] or None = None, x_power=1,
+                          offsets: dict['Axis', Numeric] = None, scales: dict['Axis', Numeric] = None,
+                          recalc=False, store=True, compress_opts: dict = None) -> 'GTN_TYPE':
+        """ multiply mps by axis value  (x * f(x))
+            x_axes: axes over which operation is applied
+        """
+        if x_axes is None:   x_axes = self.axes
+        # axIDs = tuple([ax.axID for ax in x_axes])
+
+        if isinstance(offsets, int) or isinstance(offsets, float):
+            offsets_dict = {ax: offsets for ax in x_axes}
+            offsets_ = offsets
+        elif isinstance(offsets, dict):
+            offsets_dict = {}
+            offsets_ = []
+            for ax in x_axes:
+                try:
+                    offsets_dict[ax] = offsets[ax]
+                except KeyError:
+                    offsets_dict[ax] = 0.0
+                offsets_ += [offsets_dict[ax]]
+            offsets_ = tuple(offsets)
+        else:  # if offsets is None:
+            offsets_dict = {ax: 0.0 for ax in x_axes}
+            offsets_ = offsets
+
+        if isinstance(scales, int) or isinstance(scales, float):
+            scales_dict = {ax: scales for ax in x_axes}
+            scales_ = scales
+        elif isinstance(scales, dict):
+            scales_dict = {}
+            scales_ = []
+            for ax in x_axes:
+                try:
+                    scales_dict[ax] = scales[ax]
+                except KeyError:
+                    scales_dict[ax] = 1.0
+                scales += [scales_dict[ax]]
+            scales_ = tuple(scales_)
+        else:  # scales is None:
+            scales_dict = {ax: 1.0 for ax in x_axes}
+            scales_ = scales
+
+        key = (tuple(x_axes), x_power, offsets_, scales_)
+
+        try:
+            if recalc:   raise KeyError
+            return self._mps_xmultiply[key].copy()
+        except KeyError:
+            mps = {ax: ax.get_xmultiply_mps(x_power=x_power, offset=offsets_dict[ax], scale=scales_dict[ax],
+                                            split_opts=compress_opts)
+                   for ax in x_axes}
+            gtn_mps = self.make_gtn_from_dicts([mps], data_type=DataType.MPS)
+            if store:
+                self._mps_xmultiply[key] = gtn_mps
+            print('xmultiply mps bond dimension', gtn_mps.max_bond())
+            # print('xmultiply singular values', helper.singular_values_all(gtn_mpo.data))
+            return gtn_mps.copy()
 
     def get_xmultiply_mpo(self, x_axes: Sequence['Axis'] or None = None, x_power=1,
                           offsets: dict['Axis', Numeric] = None, scales: dict['Axis', Numeric] = None,

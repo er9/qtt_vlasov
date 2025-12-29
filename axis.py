@@ -328,6 +328,10 @@ class Axis:
     ## build common TNs ##
     ######################
 
+    def get_rand_state(self, max_bond):
+        rand_mps = qtn.MPS_rand_state(self.L, max_bond)
+        return rand_mps
+
     def get_all_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
         """ build ones vector mps in shape of self
             TODO: rename this and get_ones_mps??

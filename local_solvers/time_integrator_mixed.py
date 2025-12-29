@@ -482,7 +482,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
-        # print('local RK4', self.time)
+        print('local RK4', self.time, self.te_order_target, self.te_order_final)
         dt = self.dt if dt is None else dt
 
 
@@ -529,7 +529,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
     def local_rk(self, te_order: int, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
-        # print('local RK()', te_order, self.time)
+        print('local RK()', te_order, self.time)
         dt = self.dt if dt is None else dt
         if return_intermediates:
             out, rk_states = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,

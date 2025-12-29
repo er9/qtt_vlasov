@@ -1029,6 +1029,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
         out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=time,
                             return_intermediates=return_intermediates)
 
+        if return_intermediates:
+            states = out[1]
+            for s in states[1:]:
+                s.transpose_like(states[0], inplace=True)
+
         # print('self.init ket', self.init_ket.exponent)
         # print('self.out', self.out.exponent)
         # print('out', out)

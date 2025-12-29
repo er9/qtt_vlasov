@@ -2970,9 +2970,10 @@ class Boltzmann(PDE_system):
         return new_state
 
     def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False, direction:int=1,
-                        # compress_level: int = 1, compress_level_2: int = 4, direction=1,
-                        advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                        **kwargs) -> 'Boltzmann':
+                   # compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                   solver_type=LocalSolverType.TDCross,
+                   **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
@@ -2994,8 +2995,8 @@ class Boltzmann(PDE_system):
         upwind_type = 'LF'
         if te_order == 2:
             upwind_type = 'LW'
-        elif te_order == 4:
-            upwind_type = 'SL'
+        # elif te_order == 4:
+        #     upwind_type = 'SL'
 
         ### without upwinding
         if not upwind:
@@ -3008,7 +3009,7 @@ class Boltzmann(PDE_system):
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                    compress_config=compress_config, # time=self.time,
-                                                   solver_type=LocalSolverType.TDCross,
+                                                   solver_type=solver_type,
                                                    upwind_mpo_list=upwind_mpo_dict,
                                                    direction=direction,
                                                    **kwargs)
@@ -3017,7 +3018,7 @@ class Boltzmann(PDE_system):
                                                          internal_force=internal_force,
                                                          get_collisions=True)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                    compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                    compress_config=compress_config, solver_type=solver_type,
                                                     direction=direction, verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
@@ -3105,7 +3106,7 @@ class Boltzmann(PDE_system):
                                              internal_force=internal_force, background_force=background_force )
 
             out_gtn = dist_gtn.evolve_tdvp_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                compress_config=compress_config, solver_type=solver_type,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
                                                 # upwind_func=upwind_func,
                                                 upwind_deriv_func=upwind_deriv_func,
@@ -3130,6 +3131,7 @@ class Boltzmann(PDE_system):
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
+            solver type: either TDCross or MIXED
         """
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
@@ -3140,14 +3142,14 @@ class Boltzmann(PDE_system):
         dist_gtn.data.distribute_exponent()
         # dist_gtn_copy = dist_gtn.copy()
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-        print('td cross te order', te_order)
+        print('td-dmrg cross te order', te_order, solver_type)
 
         upwind = self.upwind
         upwind_type = 'LF'
         if te_order == 2:
             upwind_type = 'LW'
-        elif te_order == 4:
-            upwind_type = 'SL'
+        # elif te_order == 4:
+        #     upwind_type = 'SL'
 
         # upwind_type = 'LW' if te_order == 2 else 'LF' # 'default'  ## local lax-friedrichs / rusanov
 
@@ -3158,7 +3160,7 @@ class Boltzmann(PDE_system):
                 upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
                 out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, time=self.time,
-                                                    solver_type=LocalSolverType.TDCross,
+                                                    solver_type=solver_type,
                                                     upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                                     **kwargs)
             else:
@@ -3166,7 +3168,7 @@ class Boltzmann(PDE_system):
                                                          internal_force=internal_force,
                                                          get_collisions=True)
                 out_gtn = dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                    compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                    compress_config=compress_config, solver_type=solver_type,
                                                     direction=direction,time=self.time, verbose_plot=self.verbose_plot,
                                                     **kwargs)
         ### with upwinding
@@ -3254,8 +3256,9 @@ class Boltzmann(PDE_system):
 
 
 
+            print('boltzman Td-dmrg', upwind_type, te_order)
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                compress_config=compress_config, solver_type=solver_type,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
                                                 # upwind_func=(upwind_func if upwind_type=='SL' else None),
                                                 upwind_deriv_func=(upwind_deriv_func), # if upwind_type != 'SL' else None),
@@ -3280,10 +3283,11 @@ class Boltzmann(PDE_system):
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
-        if solver_type == LocalSolverType.TDCross:
+        if solver_type in [LocalSolverType.TDCross, LocalSolverType.MIXED]:
             return self.tdvp_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
-                                        advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, direction=direction)
+                                   advec_axes=advec_axes, background_force=background_force,
+                                   internal_force=internal_force, direction=direction,
+                                   solver_type=solver_type)
 
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
@@ -3330,10 +3334,11 @@ class Boltzmann(PDE_system):
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
-        if solver_type == LocalSolverType.TDCross:
+        if solver_type in [LocalSolverType.TDCross, LocalSolverType.MIXED]:
             return self.time_dmrg_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, direction=direction)
+                                        internal_force=internal_force, direction=direction,
+                                        solver_type=solver_type)
 
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config

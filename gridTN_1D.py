@@ -2471,8 +2471,13 @@ class GridTN1D(GridTN):
             print('TDVP post compress bonds', helper.inner_bond_sizes(solver.out))
 
         else:
-            from local_solvers.time_integrator_cross_2 import TDVPCross as TimeInteg
-            # from local_solvers.time_integrator_mixed import TDVPMixed as TimeInteg
+            # from local_solvers.time_integrator_cross_2 import TDVPCross as TimeInteg
+            # # from local_solvers.time_integrator_mixed import TDVPMixed as TimeInteg
+
+            if solver_type is LocalSolverType.MIXED:
+                from local_solvers.time_integrator_mixed import TDMixed as TimeInteg
+            else:
+                from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
 
             # max_bond, max_bond_2 = None, None
             # cutoff = CUTOFF   # cutoff * 1.0e-2 if cutoff is not None else CUTOFF
@@ -2694,12 +2699,14 @@ class GridTN1D(GridTN):
             # gtn.data = solver.out
         else:
 
-            if te_order == 3:   ## 88
-                solver_type = LocalSolverType.MIXED
-                te_order = 4
-            elif te_order == 2:   ## 87
-                solver_type = LocalSolverType.MIXED
-                te_order = 0
+            print('solver type', solver_type, te_order)
+
+            # if te_order == 3:   ## 88
+            #     solver_type = LocalSolverType.MIXED
+            #     te_order = 4
+            # elif te_order == 2:   ## 87
+            #     solver_type = LocalSolverType.MIXED
+            #     te_order = 0
             # else:   ## 85, 89
             #     solver_type = LocalSolverType.TDCross
 
@@ -2757,7 +2764,9 @@ class GridTN1D(GridTN):
             gtn.info['num_evals'] = solver.num_evals
             gtn.info['internal_rank'] = solver.out.max_bond()
 
-            # gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
+            print('compress opts', compress_opts)
+            gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
+            print('(td-cross) post compress ranks', helper.inner_bond_sizes(gtn.data))
 
         return gtn
 

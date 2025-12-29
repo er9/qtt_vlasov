@@ -279,7 +279,7 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
         print('ovlp?', ovlp(mpx, mpx.conj()))
 
 
-    out = ovlp(mpx, mpx.conj())
+    out = ovlp(mpx, mpx.conj(), do_canonize=False)
     if out < -1 * np.sqrt(CUTOFF):
         print('<x|x> yields negative value', out)
         pdb.set_trace()
@@ -301,7 +301,7 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
     return out
 
 
-def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
+def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType'], do_canonize=True):
 
     if mps1.L == 1:
         # if True: # mps1 == mps2 or mps1[0] == mps2[0]:
@@ -327,8 +327,9 @@ def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
 
     mps1 = mps1.copy()
     mps2 = mps2.copy()
-    canonize(mps1, i=0)
-    canonize(mps2, i=0)
+    if do_canonize:
+        canonize(mps1, i=0)
+        canonize(mps2, i=0)
 
     tn = mps1.view_as(qtn.TensorNetwork)
     if mps2 is None:
@@ -785,6 +786,7 @@ def match_inner_inds(mps, ref_mps, inplace=True, append=''):
     """ match inner bond dimensions of mps to reference mps
     """
     mps = mps if inplace else mps.copy()
+    mps.mangle_inner_()
     for i in range(mps.L - 1):
         indR1 = mps.bond(i, i + 1)
         indR2 = ref_mps.bond(i, i + 1)
@@ -1442,6 +1444,8 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
     out = mps1 if inplace else mps1.copy()
     print('mps1', mps1.exponent, out.exponent)
     tmp = mps2.reindex_sites(mps1.site_ind_id)
+    tmp._site_ind_id = mps1.site_ind_id
+    # tmp_copy = tmp.copy()
     tmp = match_inner_inds(tmp, mps1, inplace=True)
 
     import local_solvers.helper_dmrg_loc as loc
@@ -1462,7 +1466,7 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
         # print('tmp', check_orthog(tmp))
 
         for i in range(out.L - 1):
-            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond)
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond, cutoff=cutoff)
             loc.decimate(tmp, i, out[i], direction=1)
 
             # print('out check orthog', i, check_orthog(out))
@@ -1470,7 +1474,7 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
 
         if do_final_update:
             i = out.L - 1
-            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond)
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond, cutoff=cutoff)
 
     else:
         out = canonize(out, i=out.L - 1, scale=False)
@@ -1480,12 +1484,19 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
             return None
 
         for i in range(out.L - 1, 0, -1):
-            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond, cutoff=cutoff)
             loc.decimate(tmp, i, out[i], direction=-1)
+
+            # print('out check orthog', i, check_orthog(out), distance(out, mps1))
+            # print('tmp check orthog', i, check_orthog(tmp), distance(tmp, tmp_copy))
 
         if do_final_update:
             i = 0
-            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond, cutoff=cutoff)
+
+        # print('did final update?', do_final_update)
+        # print('out check orthog', i, check_orthog(out), distance(out, mps1))
+        # print('tmp check orthog', i, check_orthog(tmp), distance(tmp, tmp_copy))
 
     return out
 
