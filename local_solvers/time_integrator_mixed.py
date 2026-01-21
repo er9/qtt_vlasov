@@ -264,6 +264,11 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
         tot_site = helper_tn.sum_tens(site_tens_list)
 
+        # tot_site.transpose_like(ket_x0, inplace=True)
+        # mask = np.where(ket_x0.data > -1.0e-06, 1.0, 0.0)
+        # print('euler positivity mask', np.sum(mask) / mask.size)
+        # tot_site.modify(data=tot_site.data * mask)
+
         # helper_cross.plot_submat(self.self_term.ket, left_site_pos, 1, tot_site,
         #                          select_inds=self.self_term.bra.select_inds)
         #
@@ -398,7 +403,6 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
         # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
-            print('self', self.self_term)
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
             # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
@@ -429,6 +433,11 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
                     inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites) + '_x']
 
         ket_x = ket_x.transpose(*inds, inplace=True)
+
+        # no_x_inds = {ind: ind[:-2] for ind in ket_x.inds if ind[-2:] == '_x'}
+        # tmp = ket_x.reindex(no_x_inds, inplace=False)
+        # helper_cross.plot_submat(self.out, left_site_pos, nsites, tmp,
+        #                          plt_title='deriv upwind ket')
 
         upwind_submats = {}
         for key, op_terms in self.extra_terms_dict.items():
@@ -920,6 +929,7 @@ class TDVPMixed(TDMixed, TDVP_DMRG):
         self.out.select_inds[ind1] = sel_inds
         self.out.select_tens[ind1] = TR
         self.out.select_tens_inv[ind1] = TR_inv
+        # self.out._cur_orthog = ind1 + direction
 
         ####
 

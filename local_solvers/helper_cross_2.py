@@ -230,7 +230,7 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
     # print('select inds', mps.select_inds)
     plt.plot(selectors, np.real(site_tens.data.reshape(-1)), 'o', label='site tens')
     plt.plot(selectors, np.imag(site_tens.data.reshape(-1)), 'x', label='_site tens')
-    plt.legend()
+    # plt.legend()
     plt.show()
 
 

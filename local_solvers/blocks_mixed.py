@@ -28,6 +28,7 @@ class SweepDirection(IntEnum):
     RIGHT = 1
 
 version = 'X'   ## 'G' for Galerkin projection
+x_version = 'select'   # 'select'  # 'proj'
 
 class BlockMixed(BlockDMRG, ABC):
 
@@ -190,17 +191,20 @@ class BlockVector_Mixed(BlockMixed, BlockVector_DMRG):
         # self.decimate(i, direction)
         new_env_orthog = super().extend_env(i, direction)
 
-        x_version = 'select'
-        if x_version == 'proj':
+        # x_version = 'proj'  # 'select' ## defined globally
+        if x_version == 'proj':  # 'select':
+            ### THIS GUY IS REALLY PROBLEMATIC. PROBABLY THE INVERSE IS UNSTABLE?
+            ### THE INVERSE IS USED IN BOTH X_VERSIONS (PROJ_XX):  x --> g basis.
             g2x = self.bra.select_tens.get(i, None)
+            # print('g2x condition', np.linalg.cond(g2x.data))
             ## bra (g) --> bra(x)
-            b2k = {**{ind: ind[:-2] + '__x' for ind in g2x.inds if ind[-1] == 'x'},   ## bra x
-                   **{ind: ind + '_' for ind in g2x.inds if ind[-1] != 'x'}}
+            b2k = {**{ind: ind[:-2] + '__x' for ind in g2x.inds if ind[-2:] == '_x'},   ## bra x
+                   **{ind: ind + '_' for ind in g2x.inds if ind[-2:] != '_x'}}
             g2x = g2x.reindex(b2k)
             sel_env = new_env_orthog @ g2x
             self.select_envs[i] = sel_env
 
-        elif x_version == 'select':
+        elif x_version == 'select':  # 'proj':     ## good for elementwise multiplication
             #### update select_envs ####
             ## new env is ket_and_env[select_inds],  bra_ind + '_x' // ket_ind
             ket_tens = self.ket.get_tens(i)  # self.ket[self.mps_inds[i]]
@@ -285,7 +289,7 @@ class BlockVector_Mixed(BlockMixed, BlockVector_DMRG):
         b_left = self.select_envs[left_site_pos].copy()             ## ket_ind + '_x', ket_ind
         b_right = self.select_envs[left_site_pos + 1].copy()        ## ket_ind + '_x', ket_ind
 
-        if version == 'G':
+        if self.version == 'G':
             x_ind = self.bra_horizontal_bond(left_site_pos, 1)
             b_left.reindex({x_ind: x_ind + '_L'}, inplace=True)
             b_right.reindex({x_ind: x_ind + '_R'}, inplace=True)
@@ -542,14 +546,13 @@ class BlockOperator_Mixed(BlockMixed, BlockOperator_DMRG):
         """
         #### orthogonal envs ####
         new_env_orthog = super().extend_env(i, direction)
-
-        x_version = 'select'  #  'select'
+        # x_version = 'proj'  #  'select'
 
         if x_version == 'proj':
             g2x = self.bra.select_tens.get(i, None)
             ## bra (g) --> bra(x)
-            b2k = {**{ind: ind[:-2] + '__x' for ind in g2x.inds if ind[-1] == 'x'},   ## bra x
-                   **{ind: ind + '_' for ind in g2x.inds if ind[-1] != 'x'}}
+            b2k = {**{ind: ind[:-2] + '__x' for ind in g2x.inds if ind[-2:] == '_x'},   ## bra x
+                   **{ind: ind + '_' for ind in g2x.inds if ind[-2:] != '_x'}}
             g2x = g2x.reindex(b2k)
             sel_env = new_env_orthog @ g2x
             self.select_envs[i] = sel_env

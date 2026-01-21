@@ -201,7 +201,8 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         inplace operation
     """
     # mps_copy = mps.copy()
-    print('mixed update 1 site', 'max_bond', max_bond, 'cutoff', cutoff)
+    print('mixed update 1 site', 'max_bond', max_bond, 'cutoff', cutoff, 'version', version)
+    # verbose_plot = True
 
     if not isinstance(site_i, (list, tuple)):
         site_i = [site_i]
@@ -223,6 +224,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         if verbose_plot:
             tmp1 = mps.copy()
             ref_data = helper_quimb.to_dense(mps)
+            print('len proj sites', len(proj_sites))
             for tens_g in proj_sites:
                 tmp1[left_site_pos].transpose_like(tens_g, inplace=True)
                 tmp1[left_site_pos].modify(data=tens_g.data)

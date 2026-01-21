@@ -851,8 +851,6 @@ while ts[-1] < T:
     if nt % (save_every_nt ) == 0:
 
         print('HERE')
-        pdb.set_trace()
-
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
@@ -997,6 +995,25 @@ while ts[-1] < T:
             B_mag = mu0 * charge * n0_e * A / dk
             plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
             plt.title('B')
+            plt.legend()
+
+            plt.figure()
+            Jx_data = J_field.get_comp_data(X)
+            if Jx_data is not None and np.all(Jx_data != 0):
+                Jx_data = ax_x.basis.get_realspace_1D(Jx_data, 0)
+                plt.plot(real_xs, np.real(Jx_data), label='Bx field real')
+                plt.plot(real_xs, np.imag(Jx_data), '--', label='Bx field imag')
+            Jy_data = J_field.get_comp_data(Y)
+            if np.all(Jy_data != 0):
+                Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
+                plt.plot(real_xs, np.real(Jy_data), label='By field real')
+                plt.plot(real_xs, np.imag(Jy_data), '--', label='By field imag')
+            Jz_data = J_field.get_comp_data(Z)
+            if np.all(Jz_data != 0):
+                Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
+                plt.plot(real_xs, np.real(Jz_data), label='Bz field real')
+                plt.plot(real_xs, np.imag(Jz_data), '--', label='Bz field imag')
+            plt.title('J')
             plt.legend()
 
             if not save_figs:

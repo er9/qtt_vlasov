@@ -398,7 +398,7 @@ class Term_Mixed(Term):
 
     def update_intermediate_kets(self, i: int, nsites: int, direction: SweepDirection,):
 
-        print('update intermediate kets')
+        # print('update intermediate kets')
 
         if nsites == 1 or direction == SweepDirection.RIGHT:
             left_site_pos = i

@@ -3175,6 +3175,7 @@ class Boltzmann(PDE_system):
         else:
             if upwind_type == 'LF':
                 ax_deriv_configs = self.f.component.ax_deriv_configs
+                print('ax deriv configs', ax_deriv_configs)
                 for k, v in ax_deriv_configs.items():
                     v.update(fd_type=FDType.CENTER, order=1)
 
@@ -4211,11 +4212,13 @@ class Boltzmann(PDE_system):
 
                 v_coeffs = np.zeros((npts,))
                 v_ax = self.v_axes_dict[x_ax.coordinate]
+                # print('x ax', x_ax, 'v_ax', v_ax)
                 for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
                     sel_inds = [int(x) for x in bin(ind)[2:]]
                     sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
 
                     ax_index = grid.get_axis_positions(sel_inds)
+                    # print('ax index', ax_index)
                     v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
                     v_coeffs[ix] = v_coeff
 
@@ -4253,6 +4256,12 @@ class Boltzmann(PDE_system):
         # print('submat', submat)
         # print('upwind term', upwind_terms[next(iter(upwind_terms))])
         # print('tot deriv 0', np.linalg.norm(tot_deriv_0))
+
+
+        # ## toss data points where f < 0
+        # f_mask = np.where(submat.data >= -1.0e-10, 1.0, 0.0)
+        # tot_deriv_0 = tot_deriv_0 * f_mask.reshape(-1)
+        # print('positivity mask', np.sum(f_mask) / f_mask.size)
 
         out_tens = submat.copy()
         out_tens.modify(data = tot_deriv_0.reshape(submat.shape))

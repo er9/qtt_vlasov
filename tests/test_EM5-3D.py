@@ -363,7 +363,7 @@ while nt < num_tsteps:
         if Ez is not None:
             plt.figure()
             plt.imshow(Ez)
-            plt.title('Ez(x,y,z')
+            plt.title('Ez(x,y,z)')
             plt.colorbar()
         if Bx is not None:
             plt.figure()
