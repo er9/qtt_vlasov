@@ -350,6 +350,7 @@ def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType'], d
 
 def ovlp_slow(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
 
+    mps1 = mps1.copy()
     mps2 = mps2.copy()
     mps2.mangle_inner_()
     canonize(mps1, i=0)
@@ -2774,7 +2775,7 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             # return None
 
 
-def canonize_tens_list(*tens, inplace=False, full_matrices=False):
+def canonize_tens_list(*tens, inplace=False, full_matrices=False, method='svd'):
     """ canonize this list of tensors from left to right
     """
     if full_matrices:
@@ -2791,7 +2792,7 @@ def canonize_tens_list(*tens, inplace=False, full_matrices=False):
         return tens
     else:
         # return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
-        return compress_tens_list(*tens, inplace=inplace, compress_opts={'method': 'svd', 'cutoff': CUTOFF,
+        return compress_tens_list(*tens, inplace=inplace, compress_opts={'method': method, 'cutoff': CUTOFF,
                                                                          'cutoff_mode': CUTOFF_MODE})
 
 

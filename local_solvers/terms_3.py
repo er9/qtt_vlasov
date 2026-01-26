@@ -961,8 +961,8 @@ class Term_DMRG(Term):
         # print([tens_left])
         # print([tens_right])
 
-        helper.canonize_tens_list(*tens_left, inplace=True)
-        helper.canonize_tens_list(*(tens_right[::-1]), inplace=True)
+        helper.canonize_tens_list(*tens_left, inplace=True, method='qr')
+        helper.canonize_tens_list(*(tens_right[::-1]), inplace=True, method='qr')
 
         mps._cur_orthog = orthog
         return mps

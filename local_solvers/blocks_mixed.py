@@ -192,7 +192,7 @@ class BlockVector_Mixed(BlockMixed, BlockVector_DMRG):
         new_env_orthog = super().extend_env(i, direction)
 
         # x_version = 'proj'  # 'select' ## defined globally
-        if x_version == 'proj':  # 'select':
+        if False:  # x_version == 'proj':  # 'select':
             ### THIS GUY IS REALLY PROBLEMATIC. PROBABLY THE INVERSE IS UNSTABLE?
             ### THE INVERSE IS USED IN BOTH X_VERSIONS (PROJ_XX):  x --> g basis.
             g2x = self.bra.select_tens.get(i, None)
@@ -204,7 +204,7 @@ class BlockVector_Mixed(BlockMixed, BlockVector_DMRG):
             sel_env = new_env_orthog @ g2x
             self.select_envs[i] = sel_env
 
-        elif x_version == 'select':  # 'proj':     ## good for elementwise multiplication
+        elif True:  # x_version == 'select':  # 'proj':     ## good for elementwise multiplication
             #### update select_envs ####
             ## new env is ket_and_env[select_inds],  bra_ind + '_x' // ket_ind
             ket_tens = self.ket.get_tens(i)  # self.ket[self.mps_inds[i]]

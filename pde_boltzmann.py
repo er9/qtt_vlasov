@@ -2829,6 +2829,71 @@ class Boltzmann(PDE_system):
 
         return upwind_mpo_dict
 
+
+    def _get_time_evolution_mpos_lf2(self, # dt: Numeric,
+                                     advec_axes: Sequence['Axis'] = None,
+                                     background_force=True, internal_force=True,
+                                     ax_deriv_configs=None, transpose=False, **kwargs
+                                     ) -> dict[Any, list['qtn.MatrixProductOperator']]:
+        """ LF implementation 2
+        """
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        grid = self.f.grid
+        ax_deriv_configs = self.f.component.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+        for k, v in ax_deriv_configs.items():
+            v.update(fd_type=FDType.CENTER, order=1)
+        ndim = len(advec_axes)
+
+        upwind_mpo_dict = {}
+
+        # ## 1st derivatives
+        # deriv_1s = {}
+        # for ax in advec_axes:
+        #     deriv_1s[(1, ax)] = [grid.get_firstderivative_mpo(ax, ax_deriv_configs[ax]).data]
+
+        ## 2nd derivatives
+        deriv_2s = {}
+        for i1, i2 in np.ndindex(ndim, ndim):
+            ax1, ax2 = advec_axes[i1], advec_axes[i2]
+            if i1 >= i2:
+                deriv_2s[(2, ax1, ax2)] = [grid.get_secondderivative_mpo(ax1, ax2, ax_deriv_configs[ax1],
+                                                                         ax_deriv_configs[ax2]).data]
+
+        # self.get_time_derivative_f_mpo()
+
+        x_axes = self.coords_x.axes
+        v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+        mpo_list = []
+
+        ## advection in x:  upwind applied in get_time_derivative_f_mpo
+        ## force terms
+        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+        if em_term is not None:
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if advec_axes is not None and v_ax not in advec_axes:  continue
+
+                force_component = em_term[x_coord]
+                # print('force_component', x_coord, force_component.data)
+                if force_component is None or force_component.data is None:
+                    print('force is None', x_coord)
+                    continue
+
+                force_component = force_component.apply_elemental_multiply_op()
+
+                deriv_config = ax_deriv_configs[v_ax]
+                d2dv2_mpo = v_ax.build_secondderivative_mpo(deriv_config=deriv_config)
+                v_advec_mpo = self.f.grid.build_mpo_from_subgtns([force_component, ([v_ax], d2dv2_mpo)])
+                v_advec_mpo.scalar_multiply(-1, inplace=True)
+                if v_advec_mpo is not None:
+                    upwind_mpo_dict[('CD2', v_ax)] = [v_advec_mpo.data]
+
+        return upwind_mpo_dict
+
+
     ######################
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
@@ -3039,6 +3104,24 @@ class Boltzmann(PDE_system):
 
                 flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
 
+            elif upwind_type == 'LF2':
+                ## local lax-freidrichs implementation 2
+                ## centered FD gradient + centered second order derivative
+
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                for k, v in ax_deriv_configs.items():
+                    v.update(fd_type=FDType.CENTER, order=1)
+
+                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                         internal_force=internal_force,
+                                                         get_collisions=True)
+
+                upwind_correction = self._get_time_evolution_mpos_lf2(background_force=background_force,
+                                                                      internal_force=internal_force)
+
+                flux_dict = {'CD1': [m.data for m in mpo_list], **upwind_correction}
+
+
             elif upwind_type == 'LW':
                 flux_dict = self._get_time_evolution_mpos_lw1s(ax_deriv_configs=self.f.component.ax_deriv_configs)
                 te_order = 1
@@ -3090,6 +3173,12 @@ class Boltzmann(PDE_system):
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force, time=time)
+                elif upwind_type == 'LF2':
+                    return self.deriv_upwind_lf2(dt, ket, submat, selectors, upwind_terms_dict,
+                                                 ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                 order=te_order, internal_force=internal_force,
+                                                 background_force=background_force, time=time)
+
                 elif upwind_type == 'LW':
                     return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
@@ -3105,6 +3194,7 @@ class Boltzmann(PDE_system):
                                              left_site_pos=left_site_pos, order=te_order, time=time,
                                              internal_force=internal_force, background_force=background_force )
 
+            print('init flux keys',{**flux_dict, **coeff_dict}.keys())
             out_gtn = dist_gtn.evolve_tdvp_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=solver_type,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
@@ -3187,6 +3277,24 @@ class Boltzmann(PDE_system):
 
                 flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
 
+            elif upwind_type == 'LF2':
+                ## local lax-freidrichs implementation 2
+                ## centered FD gradient + centered second order derivative
+
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                for k, v in ax_deriv_configs.items():
+                    v.update(fd_type=FDType.CENTER, order=1)
+
+                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                         internal_force=internal_force,
+                                                         get_collisions=True)
+
+                upwind_correction = self._get_time_evolution_mpos_lf2(background_force=background_force,
+                                                                      internal_force=internal_force)
+
+                flux_dict = {'CD1': [m.data for m in mpo_list], **upwind_correction}
+
+
             elif upwind_type == 'LW':
                 flux_dict = self._get_time_evolution_mpos_lw1s(ax_deriv_configs=self.f.component.ax_deriv_configs)
                 te_order = 1
@@ -3238,6 +3346,11 @@ class Boltzmann(PDE_system):
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
+                elif upwind_type == 'LF2':
+                    return self.deriv_upwind_lf2(dt, ket, submat, selectors, upwind_terms_dict, time=time,
+                                                 ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                 order=te_order, internal_force=internal_force,
+                                                 background_force=background_force)
                 elif upwind_type == 'LW':
                     # print('upwind terms dict', upwind_terms_dict.keys())
                     return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict, time=time,
@@ -3258,6 +3371,7 @@ class Boltzmann(PDE_system):
 
 
             print('boltzman Td-dmrg', upwind_type, te_order)
+            print('init flux keys', {**flux_dict, **coeff_dict}.keys())
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=solver_type,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
@@ -4262,6 +4376,58 @@ class Boltzmann(PDE_system):
         # f_mask = np.where(submat.data >= -1.0e-10, 1.0, 0.0)
         # tot_deriv_0 = tot_deriv_0 * f_mask.reshape(-1)
         # print('positivity mask', np.sum(f_mask) / f_mask.size)
+
+        out_tens = submat.copy()
+        out_tens.modify(data = tot_deriv_0.reshape(submat.shape))
+
+        return out_tens
+
+
+    def deriv_upwind_lf2(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                         upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
+                         ref_deriv: 'qtn.Tensor'=None,
+                         # left_site_pos:int = None,
+                         do_x_advection=True, do_v_advection=True,
+                         internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+
+            (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
+        """
+        print('deriv upwind Lax-Friedrichs Boltzmann v2', time)
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        tot_deriv_0 = np.zeros((npts,))
+
+        ## first order  (+ upwind for x advection)
+        print('upwind terms', upwind_terms.keys())
+        tot_deriv_0 += upwind_terms['CD1'].data.reshape(-1)
+
+        if do_v_advection:
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+
+                ## acceleration * second derviative
+                cd2_deriv_key = ('CD2', v_ax)
+
+                ## already transposed to match submat
+                # cd2_tens = upwind_terms[cd2_deriv_key]
+                # cd2_tens.transpose_like(upwind_terms['CD1'], inplace=True)
+                cd2_submat = upwind_terms[cd2_deriv_key].data.reshape(-1)
+                f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
+
+                deriv = np.sign(f_coeffs * dt) / 2 * v_ax.dx * cd2_submat
+                tot_deriv_0 -= deriv
+
+        if ref_deriv is not None:
+            plt.figure()
+            # plt.plot(ref_deriv.data.reshape(-1) * -1 - tot_deriv_0)
+            plt.plot(ref_deriv.data.reshape(-1) * -1)
+            plt.plot(tot_deriv_0)
+            plt.show()
 
         out_tens = submat.copy()
         out_tens.modify(data = tot_deriv_0.reshape(submat.shape))

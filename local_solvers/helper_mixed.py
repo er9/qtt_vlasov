@@ -194,7 +194,7 @@ def check_right_select_inds(mpx: 'qtn.MatrixProductState', select_inds: dict[int
 
 def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
                  max_bond:int = None, cutoff:float=CUTOFF, solver_type=DEFAULT_SOLVER, version='X',
-                 verbose_plot=False):
+                 verbose_plot=False, additional_g_targets: Sequence['qtn.Tensor']=None):
     """ update ket, bra with new_site; list of sites --> target these separately.
         i: int of mps site
         get row/column selected inds
@@ -254,6 +254,12 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
     print('cutoff', cutoff)
     print('left site pos', left_site_pos)
     print('check orthog', check_orthog(mps))
+
+    if additional_g_targets is not None:
+        site_i = [*site_i, *additional_g_targets]
+        site_i = [*additional_g_targets, *site_i, ]
+        print('added g tensors to 1 site update', len(additional_g_targets))
+
     update_1site_dmrg(mps, left_site_pos, site_i, direction=direction, max_bond=max_bond, cutoff=cutoff)
     out = mps
 
@@ -371,14 +377,14 @@ def update_2site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
 
 def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: int, nsites: int,
                direction: SweepDirection, max_bond: int = None, cutoff: float = None, version='X',
-               verbose_plot=False):
+               verbose_plot=False, additional_g_targets: Sequence[qtn.Tensor] = None):
     """ update ket with corresponding (targeting) tensors
         update mps_list[i] with tensors[i][0] (ideally the original tensor if just doing decimation)
         target all tensors in "tensors" list; shared across all "mps"
     """
     if nsites == 1:
         return update_1site(mps, i, tensors, direction, max_bond=max_bond, cutoff=cutoff, version=version,
-                            verbose_plot=verbose_plot)
+                            verbose_plot=verbose_plot, additional_g_targets=additional_g_targets)
     elif nsites == 2:
         left_site_pos = i - 1 if direction < 0 else i
         return update_2site(mps, left_site_pos, tensors, direction, max_bond=max_bond, cutoff=cutoff, version=version)

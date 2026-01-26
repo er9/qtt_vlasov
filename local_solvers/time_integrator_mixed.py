@@ -20,6 +20,9 @@ from local_solvers.local_mixed_eval import local_mixed_evaluator, MixedEvaluator
 from local_solvers.time_integrator import TimeIntegrator, TDVP_DMRG, TimeIntegMethod
 import local_solvers.helper_mixed as helper_mixed
 
+from local_solvers.blocks_mixed import x_version, BlockVector_Mixed
+# x_version = 'proj'  # 'select'
+
 class TDMixed(TimeIntegrator, MixedEvaluator):
     """ differs in that self.out and self.ket are the same; only updated at last time step
         target both update and original ket; but self.ket remains
@@ -56,6 +59,23 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
             super().__init__(ket_state, None, copy_obj=copy_obj)
 
         else:
+
+            ## if upwind:  expand ket to include f_coeffs
+            # if x_version == 'proj':
+            #     if upwind_mpo_list is not None:
+            #         targets = [ket_state]
+            #         for k, vs in upwind_mpo_list.items():
+            #             if isinstance(vs[0], qtn.MatrixProductState):
+            #                 targets += vs
+            #             elif isinstance(vs[0], qtn.MatrixProductOperator):
+            #                 tmp = ket_state.copy()
+            #                 for op in vs:
+            #                     tmp = helper_quimb.apply(op, tmp, compress=True)
+            #                 targets += [tmp]
+            #         print('len upwind targets ', len(targets))
+            #         ket_state = helper_quimb.add_MPS_list(targets, inplace=False,
+            #                                               do_final_update=False, direction=direction * -1)
+
 
             self.init_ket = ket_state.copy()
             self.te_order_target = te_order_target if te_order_target != 0 else 223
@@ -441,7 +461,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
         upwind_submats = {}
         for key, op_terms in self.extra_terms_dict.items():
-            if len(key) == 3 and time is not None:
+            if isinstance(key, tuple) and len(key) == 3 and time is not None:
                 key_time = key[-1]
                 if key_time != np.round(time, 10):
                     continue
@@ -581,18 +601,79 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
         # helper_cross.plot_submat(self.out, i, 1, self.out[i],
         #                          select_inds=self.out.select_inds,
         #                          ref_kets=[self.init_ket], plt_title='b4 update1')
-        #
-
 
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
+
+        ## additional targets (in G basis)
+        more_g_targets = None
+        # if not at_end and x_version == 'proj' and self.upwind_mpo_list is not None:
+        #     print('self.out - self.init (1)', helper_quimb.distance(self.init_ket, self.out.copy()) / self.init_ket.norm())
+        #     more_g_targets = []
+        #     for k, vs in self.extra_terms_dict.items():
+        #         for v in vs:
+        #             if v.operators is None or len(v.operators) == 0:
+        #                 # more_g_targets += [v.get_evaluated_site(i, 1, version_='G')]
+        #
+        #                 vmat = v.get_evaluated_site(i, 1, version_='G').copy()
+        #
+        #                 vket = v.ket.copy()
+        #                 proj_ket = self.out.copy()
+        #                 vket = helper_quimb.match_inner_inds(vket, proj_ket, inplace=True )
+        #
+        #                 mtens = proj_ket[i]
+        #                 vmat.transpose_like(mtens, inplace=True)
+        #                 mtens.modify(data=vmat.data)
+        #
+        #                 print('proj ket difference', helper_quimb.distance(vket, proj_ket) / vket.norm())
+        #
+        #                 g2x_l = self.out.select_tens.get(i - direction, None)
+        #                 g2x_r = self.out.select_tens.get(i + direction, None)
+        #
+        #                 g2xs = []
+        #                 if g2x_l is not None:  g2xs += [g2x_l]
+        #                 if g2x_r is not None:  g2xs += [g2x_r]
+        #                 tmp_tens = qtn.tensor_contract(vmat, *g2xs)
+        #                 # print("g2x", tmp_tens)
+        #
+        #                 reind = {ind: ind[:-2] for ind in tmp_tens.inds if ind[-2:] == '_x'}
+        #                 # print('reind', reind)
+        #                 tmp_tens.reindex(reind, inplace=True)
+        #                 # print('tmp tens', tmp_tens)
+        #
+        #                 vket_x = v.get_evaluated_site(i, 1, version_='X').copy()
+        #                 tmp_tens_2 = vket_x.reindex(reind, inplace=False)
+        #
+        #                 # helper_cross.plot_submat(self.out, i, 1, tmp_tens,
+        #                 #                          select_inds=self.out.select_inds,
+        #                 #                          ref_kets=[v.ket],
+        #                 #                          plt_title='g2x')
+        #
+        #                 vket = helper_quimb.match_inner_inds(vket, self.out, inplace=True)
+        #                 tmp_tens_x = helper_cross.get_submat(vket, i, 1, self.out.select_inds)
+        #                 # tmp_tens_x.reindex(reind, inplace=True)
+        #                 # helper_cross.plot_submat(self.out, i, 1, tmp_tens_x,
+        #                 #                          select_inds=self.out.select_inds,
+        #                 #                          ref_kets=[v.ket],
+        #                 #                          plt_title='sample')
+        #
+        #                 print('error', (tmp_tens_x - tmp_tens).norm() / tmp_tens_x.norm() )
+        #                 print('error', (tmp_tens_x - tmp_tens_2).norm() / tmp_tens_x.norm())
+
+        # more_g_targets = None
+
 
         # ### new version 03/01: target intermediate kets separately
         # print('self.out', self.out)
         # print('update site i', i, at_end, site_i)   ## first site is original (un-time evolved) site
         # print('site i', len(site_i), site_i[0].shape)
         helper_mixed.update_ket(self.out, site_i, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff,
-                                version=self.version)
+                                version=self.version, additional_g_targets=more_g_targets)
         # print('out[i]', i, self.out[i])
+
+        # if not at_end:
+        #     print('post update')
+        #     print('self.out - self.init (2)', helper_quimb.distance(self.init_ket, self.out.copy()) / self.init_ket.norm())
+        #     # pdb.set_trace()
 
         for term in self.terms:
             if term is not None:

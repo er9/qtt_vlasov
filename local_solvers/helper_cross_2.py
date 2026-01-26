@@ -234,6 +234,63 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
     plt.show()
 
 
+def get_submat(mps, left_site_pos, nsites, select_inds: dict[int, Sequence[int]]):
+    site_ind_ids = [mps.site_ind_id]
+    L = len(mps) if isinstance(mps, (list, tuple)) else mps.L
+    env_l = None
+    for i in range(left_site_pos):
+        tens = mps[i].copy()
+        if env_l is not None:
+            tens_tmp = qtn.tensor_contract(tens, env_l)
+            tens_tmp.transpose_like(tens, inplace=True)
+            tens_tmp.modify(inds=tens.inds)
+            tens = tens_tmp
+
+        bonds_l, bonds_r = iso_left_inds(mps, i, site_ind_ids)
+        # bonds_l = bond_p + bond_l
+
+        tens = tens.fuse({'eff_l': bonds_l}) # bond_p + bond_l})
+        tens.transpose('eff_l', *bonds_r, inplace=True)
+
+        if len(select_inds[i]) == 0:
+            raise KeyError
+        env_data = tens.data[select_inds[i], :]
+        env_l = qtn.Tensor(data=env_data, inds=('eff_l', *bonds_r))
+
+
+    env_r = None
+    for i in range(L - 1, left_site_pos + nsites - 1, -1):
+        tens = mps[i].copy()
+        if env_r is not None:
+            tens_tmp = qtn.tensor_contract(tens, env_r)
+            tens_tmp.transpose_like(tens, inplace=True)
+            tens_tmp.modify(inds=tens.inds)
+            tens = tens_tmp
+
+        bonds_l, bonds_r = iso_right_inds(mps, i, site_ind_ids)
+
+        tens = tens.fuse({'eff_r': bonds_r})
+        tens.transpose('eff_r', *bonds_l, inplace=True)
+
+        if len(select_inds[i]) == 0:
+            raise KeyError
+        env_data = tens.data[select_inds[i], :]
+        env_r = qtn.Tensor(data=env_data, inds=('eff_r', *bonds_l))
+
+    submat_tens = [mps[i] for i in range(left_site_pos, left_site_pos + nsites)]
+    if env_l is not None:       submat_tens += [env_l]
+    if env_r is not None:       submat_tens += [env_r]
+    submat = qtn.tensor_contract(*submat_tens)
+    if env_l is not None:
+        submat.reindex({'eff_l': mps.bond(left_site_pos, left_site_pos - 1)}, inplace=True)
+    if env_r is not None:
+        submat.reindex({'eff_r': mps.bond(left_site_pos + nsites - 1, left_site_pos + nsites)}, inplace=True)
+
+    submat.modify(apply=lambda x: x * 10**mps.exponent)
+
+    return submat
+
+
 def check_left_orthog(mpx: Union['qtn.MatrixProductState', Sequence[qtn.Tensor]],
                       select_inds: dict[int, Sequence[int]], site_ind_ids: Sequence[str]) -> int:
     """ returns index of first tensor that is not left canonical
