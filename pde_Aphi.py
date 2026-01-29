@@ -1,3 +1,5 @@
+import pdb
+
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
@@ -27,7 +29,7 @@ class VectorPotential(PDE_system):
                  background_A0: Optional['Field'] = None,
                  background_phi0: Optional['ScalarField'] = None,
                  is_electrostatic=False, # is_yee = False, clean=True,
-                 normalize=False, upwind=False, zipup=False,
+                 normalize=False, conservative=False, upwind=False, zipup=True,
                  te_order=60, compress_levels=None,
                  ):
         """ solves Maxwell's equation using vector-potential with Lorenz gauge
@@ -49,10 +51,12 @@ class VectorPotential(PDE_system):
         self.names['phi'] = phi.name if phi is not None else 'phi'
         self.names['dphidt'] = dphidt.name if dphidt is not None else 'dphidt'
 
-        field_names = [self.names[x] for x in ['A', 'dAdt', 'phi', 'dphidt']]
+        # field_names = [self.names[x] for x in ['A', 'dAdt', 'phi', 'dphidt']]
+        field_names = ['A', 'dAdt', 'phi', 'dphidt']
 
-        super().__init__(A, phi, field_names=field_names,
+        super().__init__(A, dAdt, phi, dphidt, field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
+                         conservative=conservative, upwind=upwind,
                          )
 
         self.coords_x = coords_x
@@ -111,7 +115,7 @@ class VectorPotential(PDE_system):
     @property
     def A(self) -> Optional['Field']:
         try:
-            return self._fields[self.names['A']]
+            return self._fields['A']
         except KeyError:
             return None
 
@@ -122,23 +126,23 @@ class VectorPotential(PDE_system):
         else:
             self.A_history = [self.A, *self.A_history]
 
-        self._fields[self.names['A']] = new_field
+        self._fields['A'] = new_field
 
     @property
     def dAdt(self) -> Optional['Field']:
         try:
-            return self._fields[self.names['dAdt']]
+            return self._fields['dAdt']
         except KeyError:
             return None
 
     @dAdt.setter
     def dAdt(self, new_field: 'Field'):
-        self._fields[self.names['dAdt']] = new_field
+        self._fields['dAdt'] = new_field
 
     @property
     def phi(self) -> Optional['ScalarField']:
         try:
-            return self._fields[self.names['phi']]
+            return self._fields['phi']
         except KeyError:
             return None
 
@@ -149,18 +153,18 @@ class VectorPotential(PDE_system):
         else:
             self.phi_history = [self.phi, *self.phi_history]
 
-        self._fields[self.names['phi']] = new_field
+        self._fields['phi'] = new_field
 
     @property
     def dphidt(self) -> Optional['ScalarField']:
         try:
-            return self._fields[self.names['dphidt']]
+            return self._fields['dphidt']
         except KeyError:
             return None
 
     @dphidt.setter
     def dphidt(self, new_field: 'ScalarField'):
-        self._fields[self.names['dphidt']] = new_field
+        self._fields['dphidt'] = new_field
 
     # @property
     def compute_dAdt(self, dt: Numeric, compress_level=1):
@@ -198,6 +202,7 @@ class VectorPotential(PDE_system):
         if self.divA0 is not None:
             divA = divA.add(self.divA0)
         out = divA.scalar_multiply(-self.matl_params.c ** 2)
+        out.name = 'dphidt'
         return out
 
     def compute_d2Adt2(self, compress=1):
@@ -206,6 +211,7 @@ class VectorPotential(PDE_system):
 
         out = laplA.add(muJ)
         out.scalar_multiply(self.matl_params.c ** 2, inplace=True)
+        out.name = 'd2Adt2'
         return out
 
     def compute_d2phidt2(self, compress=1):
@@ -214,6 +220,7 @@ class VectorPotential(PDE_system):
 
         out = lapl_phi.add(eps_rho)
         out.scalar_multiply(self.matl_params.c ** 2, inplace=True)
+        out.name = 'd2phidt2'
         return out
 
 
@@ -269,15 +276,17 @@ class VectorPotential(PDE_system):
                                         compress_levels=self._comp_levels,
                                         )
             new_system.do_normalization = self.do_normalization
-            new_system.init_norm_E = self.init_norm_A
-            new_system.init_norm_B = self.init_norm_phi
+            new_system.init_norm_A = self.init_norm_A
+            new_system.init_norm_phi = self.init_norm_phi
             new_system.dt = self.dt
 
             new_system.E = self.E
             new_system.B = self.B
 
         if A is None:           new_system.names['A'] = self.names['A']
+        if dAdt is None:        new_system.names['dAdt'] = self.names['dAdt']
         if phi is None:         new_system.names['phi'] = self.names['phi']
+        if dphidt is None:      new_system.names['dphidt'] = self.names['dphidt']
 
         new_system.divA0 = self.divA0
         new_system.curlA0 = self.curlA0
@@ -382,10 +391,11 @@ class VectorPotential(PDE_system):
             if is_first_time_step: # and self.rel_eps_inv is None:
                 ## note: incorporation of mask is not included
                 # state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
-                state_t = self.leapfrog2(dt, inplace=inplace, compress_level=compress_level)
+                state_t = self.rk4(dt, inplace=inplace, compress_level=compress_level)
             else:
                 # te_order = 0 if wk == '0' else self.te_order
 
+                print('block tddmrg te order', te_order)
                 state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
                                             do_cross=do_cross, do_tdvp=do_tdvp, do_mixed=do_mixed,
                                             compress_level=compress_level, apply_constraints=apply_constraints,
@@ -430,15 +440,28 @@ class VectorPotential(PDE_system):
         state1 = state1.add(deriv0 * dt, compress_level=0, inplace=True)
 
         if compress_level != 0:
-            print('euler compressing, conservative?')
+            print('euler compressing')
 
-            for k, comp in state1.E.components.items():
+            for k, comp in state1.A.components.items():
                 print('k', k, 'rank', comp.max_bond())
                 comp.info['internal_rank'] = comp.max_bond()
 
-            for k, comp in state1.B.components.items():
+            for k, comp in state1.dAdt.components.items():
                 print('k', k, 'rank', comp.max_bond())
                 comp.info['internal_rank'] = comp.max_bond()
+
+            state1.phi.component.info['internal_rank'] = state1.phi.max_bond()
+            if state1.dphidt is not None:
+                state1.dphidt.component.info['internal_rank'] = state1.dphidt.max_bond()
+
+
+            # for k, comp in state1.E.components.items():
+            #     print('k', k, 'rank', comp.max_bond())
+            #     comp.info['internal_rank'] = comp.max_bond()
+            #
+            # for k, comp in state1.B.components.items():
+            #     print('k', k, 'rank', comp.max_bond())
+            #     comp.info['internal_rank'] = comp.max_bond()
 
             state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
                             use_rdm=False)
@@ -452,9 +475,6 @@ class VectorPotential(PDE_system):
 
         # if state1.do_normalization:
         #     state1.normalize()
-
-        if state1.clean_div:
-            state1.clean_divergence(inplace=True, clean_E=deriv0.E is not None, clean_B=deriv0.B is not None)
 
         if state1.time is not None:
             state1.time += dt
@@ -471,7 +491,7 @@ class VectorPotential(PDE_system):
             d/dt (dA/dt) = d^2 A / dt^2 = c^2 * (lapl(A) + mu0 * J)
             d/dt V = -c^2 * div(A)   [Lorenz gauge]
         """
-        dAdt = self.dAdt.copy()
+        dAdt = self.dAdt.copy() if self.dAdt is not None else self.dAdt
         d2Adt2 = self.compute_d2Adt2( compress=compress_level )
         dphidt = self.compute_dphidt( compress=compress_level )
 
@@ -485,7 +505,7 @@ class VectorPotential(PDE_system):
             Ai[t+1] = 2 * Ai[t] - Ai[t-1] + c2dt2 * (lapl(Ai) + mu J)
         """
         if deriv0 is None:
-            d2Adt2 = self.compute_d2Adt2()
+            d2Adt2 = self.compute_d2Adt2(compress=compress1)
         else:
             d2Adt2 = deriv0.dAdt
 
@@ -497,7 +517,7 @@ class VectorPotential(PDE_system):
 
         tmp = self.A.scalar_multiply(2, inplace=False)
         tmp = tmp.add(A_prev.scalar_multiply(-1), inplace=True)
-        new_A = tmp.add(d2Adt2.scalar_multiply(dt**2, inplace=False))
+        new_A = tmp.add(d2Adt2.scalar_multiply(dt**2, inplace=False), compress_level=compress)
 
         self.A = new_A
         return new_A
@@ -510,13 +530,13 @@ class VectorPotential(PDE_system):
             phi is offset from A by a half time-step for second-order accuracy
         """
         if deriv0 is None:
-            div_A_curr = self.A.divergence(self.coords_x, compress_level=compress)
+            div_A_curr = self.A.divergence(self.coords_x, compress_level=compress1)
             dphi_dt = div_A_curr.scalar_multiply(-self.matl_params.c ** 2, inplace=True)
         else:
             dphi_dt = deriv0.phi
 
         phi_half = self.phi
-        phi_half_new = phi_half.add(dphi_dt, inplace=False)
+        phi_half_new = phi_half.add(dphi_dt, inplace=False, compress_level=compress)
 
         self.phi = phi_half_new
         return self.phi
@@ -916,13 +936,15 @@ class VectorPotential(PDE_system):
         compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
         max_bond = compress_opts.get('max_bond', None)
         cutoff = compress_opts.get('cutoff', CUTOFF)
+        print('max bond', max_bond)
+        print('cutoff', cutoff)
         # if max_bond is not None:
         #     compress_opts['max_bond'] = max_bond  # * num_active_fields
 
         ## current
         jF_dict = {}
         if j is not None:
-            jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+            jF_dict = {compID.type.value + 3: comp for compID, comp in j.components.items()}
 
         ## background field components
         background_comps = {}
@@ -1005,7 +1027,7 @@ class VectorPotential(PDE_system):
             AC = new_F1.get(i, self.grid_X.make_empty_gridTN())
             AC.ax_deriv_configs = ax_deriv_configs
             if not (AC is None and compID not in new_sys.A.componentIDs):
-                new_sys.E.components[compID] = AC
+                new_sys.A.components[compID] = AC
 
             ref_AC = new_sys.dAdt.components.get(compID, None)
             ax_deriv_configs = ref_AC.ax_deriv_configs if ref_AC is not None else {}
@@ -1028,20 +1050,30 @@ class VectorPotential(PDE_system):
             if Acomp is not None:
                 Acomp.info['num_evals'] = info['num_evals'].get(it, 0) if info is not None else 0
                 Acomp.info['internal_rank'] = Acomp.max_bond()
+                print('A internal rank', Acomp.max_bond())
 
             Acomp = new_sys.dAdt[compID]
             if Acomp is not None:
                 Acomp.info['num_evals'] = info['num_evals'].get(it + 3, 0) if info is not None else 0
                 Acomp.info['internal_rank'] = Acomp.max_bond()
+                print('dAdt internal rank', Acomp.max_bond())
 
         phi = new_sys.phi
         if phi is not None:
-            phi.info['num_evals'] = info['num_evals'].get(7, 0) if info is not None else 0
-            phi.info['internal_rank'] = phi.max_bond()
+            phi.component.info['num_evals'] = info['num_evals'].get(7, 0) if info is not None else 0
+            phi.component.info['internal_rank'] = phi.max_bond()
+            print('phi internal rank', phi.max_bond())
 
 
-        new_sys.A.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
-        new_sys.dAdt.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
+        new_sys.A.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
+        new_sys.dAdt.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
         new_sys.phi.compress(inplace=True, compress_level=1)
+
+        # print('new sys A', new_sys.A)
+        # print('new sys dAdt', new_sys.dAdt)
+        # print("new sys phi", new_sys.phi)
+        #
+        # for compID, comp in self.A.components.items():
+        #     print('comp A', compID, comp)
 
         return new_sys

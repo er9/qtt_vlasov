@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from axis import Axis
     from gridTN import GridTN
     from grid import Grid
-    from field import Field, ScalarField
+
+from field import Field, ScalarField
 
 
 """ class defining PDE system, containing info about
@@ -74,9 +75,10 @@ class PDE_system:
             compress_levels = list(range(1,10))     # some arbitrary number; compress at all levels
         self._comp_levels = compress_levels
 
-        self._fields: dict[Any, Optional[Field]] = {field.name: field for field in fields if field is not None}
         self.field_names = [field.name for field in fields if field is not None] \
                               if field_names is None else field_names
+        self._fields: dict[Any, Optional[Field]] = {fn: field for fn, field in zip(self.field_names, fields)
+                                                    if field is not None}
 
         ## pad system with 'None' fields as needed, prescribed by field_names
         for fn in self.field_names:

@@ -1790,7 +1790,10 @@ class BlockTimeIntegrator:
         def deriv_func(site_tens_dict_, **kwargs) -> dict[int,'qtn.Tensor']:
 
             for k, v in site_tens_dict_.items():
-                self.num_evals[k] += v.size
+                try:
+                    self.num_evals[k] += v.size
+                except KeyError:
+                    self.num_evals[k] = v.size
 
             eff_Ax_dict = self._get_Ax_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict_,
                                                  negative_dt = (dt < 0))
