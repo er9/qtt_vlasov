@@ -236,7 +236,7 @@ class Grid1D(Grid):
     #                 for ax in shifts.keys()}
     #     return self.make_mpo_ndim(mpo_dict)
 
-    def get_rand_state(self, max_bond):
+    def get_rand_state(self, max_bond) -> 'GridTN1D':
         rand_mps = qtn.MPS_rand_state(self.L, max_bond)
         return self.make_gridTN(rand_mps)
 

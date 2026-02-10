@@ -403,7 +403,7 @@ class Grid:
         return self.make_mpo_ndim(mpo_dict)
         # return GridTN(self, data=[mpo_dict])
 
-    def get_rand_state(self, max_bond):
+    def get_rand_state(self, max_bond) -> 'GridTN':
         raise NotImplementedError
 
     #########################################

@@ -1985,7 +1985,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
     try:
         if False:  # not scale:
-            return mps.canonize_func(i, )
+            return mps.canonize(where=i, )
         else:
 
             ## helper function to normalize site i, shift weight into mps.exponent
@@ -2003,7 +2003,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
             ## canonicalize
             for x in range(cur_orthog[0], i):
                 # mps.left_canonize_site(x)
-                left_compress_site(mps, x, max_bond=None, cutoff=CUTOFF,
+                left_compress_site(mps, x, max_bond=None, cutoff=CUTOFF, method='qr',
                                    cutoff_mode=CUTOFF_MODE)  ## catches LinAlg error
                 # try:
                 #     mps.left_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
@@ -2014,7 +2014,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
             for x in range(cur_orthog[1], i, -1):
                 # mps.right_canonize_site(x)
-                right_compress_site(mps, x, max_bond=None, cutoff=CUTOFF,
+                right_compress_site(mps, x, max_bond=None, cutoff=CUTOFF, method='qr',
                                     cutoff_mode=CUTOFF_MODE)  ## catches LinAlg error
                 # try:
                 #     mps.right_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
