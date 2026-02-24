@@ -228,8 +228,13 @@ class VectorPotential(PDE_system):
         """ E = -grad(phi) - dA/dt
         """
         ## dA/dt
-        dAdt = self.dAdt if self.dAdt is not None else self.compute_dAdt(self.dt)
+        # print('self.dAdt', self.dAdt.components, self.dAdt.num_active)
+        if self.dAdt is None or self.dAdt.num_active == 0:
+            dAdt = self.compute_dAdt(self.dt)
+        else:
+            dAdt = self.dAdt
         dAdt = dAdt.scalar_multiply(-1, inplace=False)
+        # print('dAdt', dAdt.components)
 
         if self.staggered_phi:
             phi0 = self.phi_history[0]
@@ -327,6 +332,60 @@ class VectorPotential(PDE_system):
         nrg = self.B.dot(B_conj, compress_level=compress_level, inner_compress_level=compress_level, zipup=True)
         nrg.scalar_multiply(1./2/self.matl_params.mu0, inplace=True)
         return nrg
+
+    def global_momentum(self):
+        """ compute S = 1/mu0 E x B*
+        """
+        B_conj = self.B.copy()
+        for k, B in B_conj.components.items():
+            if B.data is not None:
+                B.data.conj(inplace=True)
+        B_conj.scalar_multiply(1. / self.matl_params.mu0, inplace=True)
+        E_field = self.E
+
+        comps = self.coords_x.coords
+        other_comps = comps
+
+        out = {}
+        for i in range(3):
+            c0 = comps[i]
+            c1, c2 = comps[(i + 1) % 3], other_comps[(i + 2) % 3]
+
+            try:
+                out_comp_1 = E_field[c1].meas_expec(B_conj[c2])
+            except KeyError:
+                out_comp_1 = 0.0
+
+            try:
+                out_comp_2 = E_field[c2].meas_expec(B_conj[c1])
+            except KeyError:
+                out_comp_2 = 0.0
+
+            out[c0] = out_comp_1 + out_comp_2
+
+        return out
+
+    def global_E_nrg(self):
+        """ compute eps0 |E|^2 *
+        """
+        E_field = self.E.copy()
+        comps = self.coords_x.coords
+        out = {}
+        for i in range(3):
+            c0 = comps[i]
+            out[c0] = E_field[c0].frobenius_norm()**2
+        return out
+
+    def global_B_nrg(self):
+        """ compute eps0 |E|^2 *
+        """
+        B_field = self.B.copy()
+        comps = self.coords_x.coords
+        out = {}
+        for i in range(3):
+            c0 = comps[i]
+            out[c0] = B_field[c0].frobenius_norm()**2
+        return out
 
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace=False, compress_level: int = 1,
                        max_iter=100, err_tol=None, apply_constraints=False,

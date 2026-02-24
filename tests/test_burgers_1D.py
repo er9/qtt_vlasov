@@ -114,7 +114,7 @@ def euler_upwind(dx, dt: Numeric, vec: np.ndarray):
 ########################################
 
 save_figs = False
-save_data = True
+save_data = flags.get('save_data', True)
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -129,6 +129,7 @@ if restart or save_data or save_figs:
     # fdir = './data_cross/Burgers/250919/'
     # fdir = './data_cross/Burgers/251103_xx/'    ## MIXED manually set in pde_burgers
     fdir = './data_cross/Burgers/251103/'  ## CROSS manually set in pde_burgers
+    fdir = './data_cross/Burgers/260220/'  ## redo MIXED calc as described in paper
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -292,6 +293,7 @@ while ts[-1] < T:
     print('dt/dx', dt_/ax_x.dx, dt_/(ax_x.dx**2))
 
     walltime = time.time()
+    bg_sys.verbose_plot = (nt % 10 == 0)
     bg_sys = bg_sys.next_time_step(dt_, compress_level=1, verbose_plot=False, is_first_time_step=(nt==0 and not upwind)
                                    ) # is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
     # bg_sys.f.component.average_neighbor(inplace=True, mu=0.5, spread=1)

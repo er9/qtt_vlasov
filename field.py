@@ -199,6 +199,14 @@ class Field:
         """
         self._set_component(compID, new_comp)
 
+    @property
+    def num_active(self):
+        it = 0
+        for k, v in self.components.items():
+            if v is not None and v.data is not None:
+                it += 1
+        return it
+
     def save_data(self, fstr):
         for compID, gtn in self.components.items():
             if gtn is not None:

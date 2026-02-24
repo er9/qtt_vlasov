@@ -548,7 +548,7 @@ class BlockOperator_Mixed(BlockMixed, BlockOperator_DMRG):
         new_env_orthog = super().extend_env(i, direction)
         # x_version = 'proj'  #  'select'
 
-        if x_version == 'proj':
+        if x_version == 'proj':  # and ((i > self.L // 2) if direction < 0 else (i < self.L // 2)):
             g2x = self.bra.select_tens.get(i, None)
             ## bra (g) --> bra(x)
             b2k = {**{ind: ind[:-2] + '__x' for ind in g2x.inds if ind[-2:] == '_x'},   ## bra x
@@ -557,7 +557,7 @@ class BlockOperator_Mixed(BlockMixed, BlockOperator_DMRG):
             sel_env = new_env_orthog @ g2x
             self.select_envs[i] = sel_env
 
-        elif x_version == 'select':
+        elif x_version == 'select':  ## else:
 
             # print('orig SAE extend env', 'op is None', self.operator is None)
             #### new env is ket_and_env[select_inds] (bra_ind + '_x', ket_ind)  ####

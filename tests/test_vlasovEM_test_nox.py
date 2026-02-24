@@ -169,7 +169,7 @@ dt_frac = 0.9
 dt = flags.get('dt', 0.0125)   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
-upwind = True if te_order in [1, 3, 66, 68, 69, 76, 78, 88, 86, 89] else False
+upwind = flags.get('do_upwind', False) # True if te_order in [1, 3, 66, 68, 69, 76, 78, 88, 86, 89, 96, 99, 91, 94] else False
 
 save_every_nt = flags.get('save_every_nt', 100)
 

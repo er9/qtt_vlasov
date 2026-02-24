@@ -661,6 +661,48 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
         # more_g_targets = None
 
+        if self.verbose_plot:
+            print('self.out - self.init (1)', helper_quimb.distance(self.init_ket, self.out.copy()) / self.init_ket.norm())
+            for k, vs in self.extra_terms_dict.items():
+                for v in vs:
+                    vmat = v.get_evaluated_site(i, 1, version_='X').copy()
+                    print('vmat', vmat)
+
+                    vket = v.ket.copy()
+
+                    if v.operators is not None and len(v.operators) > 0:
+                        for op in v.operators:
+                            vket = helper_quimb.apply(op, vket)
+
+                    proj_ket = self.out.copy()
+                    vket = helper_quimb.match_inner_inds(vket, proj_ket, inplace=True )
+
+                    proj_vket = helper_quimb.proj_mps(vket, proj_ket, i)
+
+                    mtens = proj_ket[i]
+
+                    g2x_l = self.out.select_tens.get(i - direction, None)
+                    g2x_r = self.out.select_tens.get(i + direction, None)
+                    g2xs = []
+                    if g2x_l is not None:  g2xs += [g2x_l]
+                    if g2x_r is not None:  g2xs += [g2x_r]
+                    mtens = qtn.tensor_contract(mtens, *g2xs)
+                    print('mtens', mtens)
+
+                    vmat.transpose_like(mtens, inplace=True)
+                    mtens.modify(data=vmat.data)
+
+                    # print('proj ket difference', helper_quimb.distance(vket, proj_ket) / vket.norm())
+                    print('proj difference', (mtens - vmat).norm())
+
+                    print({ind: ind[:-2] for ind in vmat.inds if ind[-2:] == '_x'})
+                    vmat.reindex({ind: ind[:-2] for ind in vmat.inds if ind[-2:] == '_x'}, inplace=True)
+                    mtens.reindex({ind: ind[:-2] for ind in mtens.inds if ind[-2:] == '_x'}, inplace=True)
+                    helper_cross.plot_submat(self.out, i, 1, vmat,  # mtens,
+                                             select_inds=self.out.select_inds,
+                                             ref_kets=[v.ket, vket, proj_vket],
+                                             plt_title='Ax')
+
 
         # ### new version 03/01: target intermediate kets separately
         # print('self.out', self.out)
@@ -702,7 +744,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
             self.update_blocks(i, direction)
 
-            if self.verbose_plot:
+            if False:  # self.verbose_plot:
                 tmp_gtn = self.grid.make_gridTN(self.out)
                 lefts, rights = tmp_gtn.get_bases(i + direction)
                 for l in [*lefts[:5], *rights[:5]]:

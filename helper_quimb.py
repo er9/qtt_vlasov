@@ -2762,7 +2762,8 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             # site_i.transpose_like(mps[i], inplace=True)
             mps[i].modify(data=site_i1.data, inds=site_i1.inds)
             mps[i - 1].modify(data=site_i2.data, inds=site_i2.inds)
-            mps.right_compress_site(i, method='eig', **compress_opts)
+            mps.right_compress_site(i, # method='eig',
+                                    **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress (eig) site {i} yielded nan')
         except ZeroDivisionError:
@@ -3850,3 +3851,40 @@ def partition_1D_mps(mps: 'qtn.MatrixProductState', i: int, do_canonize=True):
 
     return l_tens, r_tens
 
+
+def proj_mps(mps, proj_mps, center):
+    L_ = mps.L
+    mps.mangle_inner_()
+    proj_mps.site_ind_id = mps.site_ind_id
+
+    envL = None
+    for ix in range(center):
+        # print('left: ix', ix)
+        xtens = [mps[ix], proj_mps[ix]]
+        if envL is not None:
+            xtens += [envL]
+        envL = qtn.tensor_contract(*xtens)
+
+    envR = None
+    for ix in range(mps.L - 1, center, -1):
+        # print('right: ix', ix)
+        xtens = [mps[ix], proj_mps[ix]]
+        if envR is not None:
+            xtens += [envR]
+        envR = qtn.tensor_contract(*xtens)
+
+    xtens = [mps[center]]
+    if envL is not None:
+        xtens += [envL]
+    if envR is not None:
+        xtens += [envR]
+    mtens = qtn.tensor_contract(*xtens)
+    mtens.drop_tags()
+    mtens.add_tag(proj_mps.site_tag(center))
+
+    tensors = [proj_mps[ix] for ix in range(center)] + [mtens] + [proj_mps[ix] for ix in range(center + 1, L_)]
+
+    new_mps = qtn.TensorNetwork(tensors)
+    new_mps.view_like(proj_mps, inplace=True)
+    new_mps.exponent = mps.exponent
+    return new_mps

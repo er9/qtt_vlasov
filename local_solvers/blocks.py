@@ -266,6 +266,9 @@ class Block:
                       return_intermediates=False, site_tens: 'qtn.Tensor'=None):
         raise NotImplementedError
 
+    def get_projected_Ax(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
+                         site_tens: 'qtn.Tensor' = None):
+        raise NotImplementedError
     def get_projected_bond(self, left_site_pos:int, return_combined=False, transpose_bonds=None):
         """ get environment for bond between left_site_pos, left_site_pos + 1
             assumes ket, bra at left_site_pos are canonical and left_site_pos+1 is not updated
@@ -292,7 +295,11 @@ class Block:
 
         ix = self.cur_orthog
         env_L, env_R = self.envs[ix - 1], self.envs[ix + 1]
-        tens_list = [self.ket[ix], self.bra[ix]]
+
+        b2k = self.projected_bra_to_ket(ix, 1)
+        k2b = {v: k for k, v in b2k.items()}
+        bra_tens = self.bra[ix].reindex(k2b)
+        tens_list = [self.ket[ix],  bra_tens]
         tens_list += [env_L] if env_L is not None else []
         tens_list += [env_R] if env_R is not None else []
         tens_list += [self.operator[ix]] if self.operator is not None else []
@@ -527,6 +534,10 @@ class BlockVector(Block, ABC):
         # raise NotImplementedError
         return
 
+def get_projected_Ax(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
+                     site_tens: 'qtn.Tensor'=None):
+    return self.get_projected(left_site_pos, nsites, return_combined=return_combined, transpose_bonds=transpose_bonds,
+                              site_tens=site_tens)
 
 class BlockOperator(Block, ABC):
 
@@ -632,6 +643,25 @@ class BlockOperator(Block, ABC):
             return A_eff, []
 
         return A_eff
+
+    def get_projected_Ax(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
+                         site_tens: 'qtn.Tensor'=None):
+
+        Aeff = self.get_projected(left_site_pos, nsites, return_combined=False, transpose_bonds=None,
+                                  return_intermediates=False)
+        site_tens = [self.ket[t] for t in range(left_site_pos, left_site_pos + nsites)] if site_tens is None else [site_tens]
+
+        if return_combined:
+            out = qtn.tensor_contract(*Aeff.tensors, *site_tens.tensors)
+            out = out * Aeff.exponent + self.ket.exponent
+            if transpose_bonds is not None:
+                out.transpose(*transpose_bonds, inplace=True)
+        else:
+            out = qtn.TensorNetwork([*Aeff.tensors, *site_tens])
+            out.exponent = Aeff.exponent + self.ket.exponent
+        return out
+
+
 
 #####
 

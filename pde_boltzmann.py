@@ -4435,6 +4435,71 @@ class Boltzmann(PDE_system):
         return out_tens
 
 
+    def euler_upwind_lf2(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                         upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
+                         ref_deriv: 'qtn.Tensor'=None,
+                         # left_site_pos:int = None,
+                         do_x_advection=True, do_v_advection=True,
+                         internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+
+            (Juno DG paper --> df/dt = a/2/dx (f_n+1 - f_n-1) - |a|/2/dx (f_n+1 - f_n^2 + f_n-1)
+            --> f = f_n + dt / dx * ( 1/2 (a_n+1 f_n+1 + a_n f_n) - |a|/2 ( f_n+1 - f_n)
+                                    - 1/2 (a_n f_n - a_n-1 f_n-1) - |a|/2 ( f_n - f_n-1)
+                                    )
+            along the derivative axis for Vlasov, coefficient a is constant
+            if a > 0:
+            --> f = f_n + dt / dx * ( a/2 (f_n+1 + f_n) - a/2 (f_n+1 - f_n)
+                                    - a/2 (f_n + f_n-1) - a/2 (f_n - f_n-1))
+            --> f = f_n + dt / dx * ( a/2 (f_n+1 - f_n-1) - a/2 (f_n+1 - 2f_n + f_n-1)
+                  = f_n + dt / dx * ( a (f_n - f_n-1) )
+            if a < 0:
+            --> f = f_n + dt / dx * ( a/2 (f_n+1 - f_n-1) + a/2 (f_n+1 - 2f_n + f_n-1)
+                  = f_n + dt / dx * ( a (f_n+1 - f_n) )
+        """
+        print('euler upwind Lax-Friedrichs Boltzmann v2', time)
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        tot_deriv_0 = np.zeros((npts,))
+
+        ## first order  (+ upwind for x advection)
+        print('upwind terms', upwind_terms.keys())
+        tot_deriv_0 += upwind_terms['CD1'].data.reshape(-1)
+
+        if do_v_advection:
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+
+                ## acceleration * second derviative
+                cd2_deriv_key = ('CD2', v_ax)
+
+                ## already transposed to match submat
+                # cd2_tens = upwind_terms[cd2_deriv_key]
+                # cd2_tens.transpose_like(upwind_terms['CD1'], inplace=True)
+                cd2_submat = upwind_terms[cd2_deriv_key].data.reshape(-1)
+                f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
+
+                deriv = np.sign(f_coeffs * dt) / 2 * v_ax.dx * cd2_submat
+                tot_deriv_0 -= deriv
+
+        if ref_deriv is not None:
+            plt.figure()
+            # plt.plot(ref_deriv.data.reshape(-1) * -1 - tot_deriv_0)
+            plt.plot(ref_deriv.data.reshape(-1) * -1)
+            plt.plot(tot_deriv_0)
+            plt.show()
+
+        out_tens = submat.copy()
+        out_tens.modify(data = tot_deriv_0.reshape(submat.shape))
+
+        return out_tens
+
+
+
     def deriv_upwind_lax_wendroff_1s(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
                                     upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
                                     ref_deriv: 'qtn.Tensor'=None,
