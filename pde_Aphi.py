@@ -563,20 +563,25 @@ class VectorPotential(PDE_system):
         """ evolve A using standard second order method
             Ai[t+1] = 2 * Ai[t] - Ai[t-1] + c2dt2 * (lapl(Ai) + mu J)
         """
+        print('evolve A')
         if deriv0 is None:
             d2Adt2 = self.compute_d2Adt2(compress=compress1)
         else:
             d2Adt2 = deriv0.dAdt
+        print('d2Adt2 rank', d2Adt2.max_bonds())
 
         A_prev = self.A_history[0]
         # try:
         #     A_prev = self.A_history[0]
         # except IndexError:
         #     A_prev = Field('A0', grid=self.grid_X, data={})
+        print('A prve rank', A_prev.max_bonds())
 
         tmp = self.A.scalar_multiply(2, inplace=False)
-        tmp = tmp.add(A_prev.scalar_multiply(-1), inplace=True)
+        tmp = tmp.add(A_prev.scalar_multiply(-1), inplace=True, compress_level=compress1)
+        print('dA/dt rank', tmp.max_bonds(), compress1)
         new_A = tmp.add(d2Adt2.scalar_multiply(dt**2, inplace=False), compress_level=compress)
+        print('new A', new_A.max_bonds())
 
         self.A = new_A
         return new_A
@@ -588,14 +593,17 @@ class VectorPotential(PDE_system):
             dphi/dt = -c^2 div(A)
             phi is offset from A by a half time-step for second-order accuracy
         """
+        print('evolve phi')
         if deriv0 is None:
             div_A_curr = self.A.divergence(self.coords_x, compress_level=compress1)
             dphi_dt = div_A_curr.scalar_multiply(-self.matl_params.c ** 2, inplace=True)
         else:
             dphi_dt = deriv0.phi
+        print('dphi dt rank', compress1, dphi_dt.max_bond())
 
         phi_half = self.phi
         phi_half_new = phi_half.add(dphi_dt, inplace=False, compress_level=compress)
+        print('new phi rank', compress, phi_half_new.max_bond())
 
         self.phi = phi_half_new
         return self.phi

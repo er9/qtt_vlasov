@@ -42,23 +42,18 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    if run == 1:       # Lx = 40 * lam
-        dnum = 250423
-        # dnum = 250517
-    elif run == 2:     # Lx = 10 * lam
-        dnum = 250505
-        # dnum = 250518  # 250505
+    dnum = f'260225_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
         fnum = f'{dnum}/eta{dissipation}_c{comp_style}_m{deriv_order}/'
 
     if do_full:
-        sdir = f'{save_dir}/data{fnum}/EM_jz2D_full/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz2D_full/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz2D_full/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz2D_full/'
     else:
-        sdir = f'{save_dir}/data{fnum}/EM_jz2D/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz2D/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz2D/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz2D/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
@@ -144,6 +139,8 @@ compress_style = 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
+os.makedirs(fdir + subdir, exist_ok=True)
+os.makedirs(sdir + subdir, exist_ok=True)
 
 te_compress_A = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
@@ -231,6 +228,7 @@ init_phi_field = ScalarField('phi', grid_xyz, data=init_phi_gtn, compress_config
 
 
 try:
+    ## restart problematic with leapfrog bc dAdt is not saved and is not set...
     if not restart:
         raise IOError
 
@@ -325,17 +323,20 @@ while nt < num_tsteps:
         max_bond_phis += [phi_bonds]
 
     print('ap sys dt', ap_sys.dt, dt)
-    ap_sys.compute_E(compress_level=1)
-    ap_sys.compute_B(compress_level=1)
-    nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
-    nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
+    # ap_sys.compute_E(compress_level=1)
+    # ap_sys.compute_B(compress_level=1)
+    # nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
+    # nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
 
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), ap_sys.phi.max_bonds(),
+          DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
+        ap_sys.compute_E(compress_level=1)
+        ap_sys.compute_B(compress_level=1)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data()
@@ -371,6 +372,20 @@ while nt < num_tsteps:
         plt.close()
 
     if save_data and nt%save_every_nt==0:
+        ap_sys.compute_E(compress_level=1)
+        ap_sys.compute_B(compress_level=1)
+        ap_sys.E.save_data(sdir + subdir + f'E-nt{nt}')
+        ap_sys.B.save_data(sdir + subdir + f'B-nt{nt}')
+
+        for compID in ap_sys.E.componentIDs:
+            E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if E_data is not None:
+                np.save(fdir + subdir + f'E{compID}_y0.npy', E_data)
+
+        for compID in ap_sys.B.componentIDs:
+            B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if B_data is not None:
+                np.save(fdir + subdir + f'B{compID}_y0.npy', B_data)
 
         test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                                   ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
