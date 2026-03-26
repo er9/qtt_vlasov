@@ -3605,7 +3605,17 @@ def append_mpx(mpx1, mpx2, inplace=False, mps_use_lower=True):
     new._L = L1 + L2
 
     if L1 != 0 and len(new[L1 - 1].bonds(new[L1])) == 0:
-        new.new_bond(new.site_tag(L1 - 1), new.site_tag(L1))
+        new_ind = qtn.rand_uuid()
+        tens1 = new[L1-1].data
+        if scipy.sparse.issparse(tens1):
+            tens1 = np.array(tens1.todense())
+        new_data = tens1.reshape(*tens1.shape, 1)
+        new_inds = new[L1-1].inds + (new_ind,)
+        new[L1-1].modify(data=new_data, inds=new[L1-1].inds + (new_ind,))
+        # new[L1-1].new_ind(new_ind)
+        new[L1].new_ind(new_ind)
+        # qtn.new_bond(new[L1-1], new[L1])
+        # new.new_bond(new.site_tag(L1 - 1), new.site_tag(L1))
 
     if isinstance(mpx2, qtn.MatrixProductOperator) or isinstance(mpx1, qtn.MatrixProductOperator):
         new.view_as(qtn.MatrixProductOperator, L=L1 + L2, cyclic=False, inplace=True,

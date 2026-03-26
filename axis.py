@@ -702,7 +702,7 @@ class Axis:
 
 
     def get_coarse_grain_mpx(self, depth: int, upper_ind_id: str='i({})', lower_ind_id: str='o({})',
-                             site_tag_id: str='T(}})') -> MPOType:
+                             site_tag_id: str='T({})') -> MPOType:
         """ partial integral
         """
         return self.basis.build_coarse_grain_mpx(self, depth, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,

@@ -247,8 +247,12 @@ try:
     init_dA_field.compress(compress_opts={'cutoff': cutoff})
     init_phi_field.compress(compress_opts={'cutoff': cutoff})
 
+    print("restarted")
+
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
+
+    print('no restart')
 
     ts = [0]
     nt = 0
@@ -257,6 +261,20 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     max_bond_phis = [0]
     nrg_E_ts = [0]
     nrg_B_ts = [0]
+
+    init_Ax_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_Ay_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_Az_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAy_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_phi_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+
+    init_A_field = Field('A', grid_xyz, data={X: init_Ax_gtn, Y: init_Ay_gtn, Z: init_Az_gtn},
+                         compress_config=te_compress_A, is_sqrt=True)
+    init_dA_field = Field('dAdt', grid_xyz, data={X: init_dAx_gtn, Y:init_dAy_gtn, Z: init_dAz_gtn},
+                         compress_config=te_compress_dAdt, is_sqrt=True)
+    init_phi_field = ScalarField('phi', grid_xyz, data=init_phi_gtn, compress_config=te_compress_phi, is_sqrt=True)
 
 
 

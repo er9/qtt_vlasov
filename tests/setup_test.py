@@ -673,7 +673,10 @@ def save_data_Aphi(fstr, Aphi_sys, fdir, extra_str='', add_fstr='',
 
     Aphi_sys.A.save_data(fdir + 'A_' + f_fstr)
     Aphi_sys.phi.save_data(fdir + 'phi_' + f_fstr)
-    if Aphi_sys.dAdt is not None:
+    if Aphi_sys.dAdt is None:
+        dAdt = Aphi_sys.compute_dAdt()
+        dAdt.save_data(fdir + 'dAdt_' + f_fstr)
+    else:
         Aphi_sys.dAdt.save_data(fdir + 'dAdt_' + f_fstr)
 
     if not all(np.isnan(max_bond_A[-1])):

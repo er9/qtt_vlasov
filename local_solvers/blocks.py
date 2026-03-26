@@ -298,17 +298,28 @@ class Block:
 
         b2k = self.projected_bra_to_ket(ix, 1)
         k2b = {v: k for k, v in b2k.items()}
+        if self.operator is None:
+            k2b.pop(self.ket.site_ind_id.format(ix), None)
         bra_tens = self.bra[ix].reindex(k2b)
         tens_list = [self.ket[ix],  bra_tens]
         tens_list += [env_L] if env_L is not None else []
         tens_list += [env_R] if env_R is not None else []
         tens_list += [self.operator[ix]] if self.operator is not None else []
 
+        # print('norm', self.bra[ix], bra_tens)
+        # print('self.operator', self.operator[ix] if self.operator is not None else None)
+        # print('tens list', tens_list)
         ovlp = qtn.tensor_contract(*tens_list)
+        if isinstance(ovlp, qtn.Tensor):
+            print('self.operator', self.operator)
+            print('tens list', tens_list)
+            print('b2k', b2k)
 
         tot_exponent = self.ket.exponent + self.bra.exponent
         if self.operator is not None:
             tot_exponent += self.operator.exponent
+
+        # print('tot exponent', tot_exponent, self.operator.exponent if self.operator is not None else None)
 
         return ovlp * 10 ** tot_exponent
 
@@ -498,6 +509,7 @@ class BlockVector(Block, ABC):
                 b_eff.add(*site_tens)
             else:
                 b_eff.add(site_tens)
+            b_eff.exponent += self.ket.exponent
 
         if b_left is not None:
             b_eff.add(b_left)
@@ -534,10 +546,10 @@ class BlockVector(Block, ABC):
         # raise NotImplementedError
         return
 
-def get_projected_Ax(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                     site_tens: 'qtn.Tensor'=None):
-    return self.get_projected(left_site_pos, nsites, return_combined=return_combined, transpose_bonds=transpose_bonds,
-                              site_tens=site_tens)
+    def get_projected_Ax(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
+                         site_tens: 'qtn.Tensor'=None):
+        return self.get_projected(left_site_pos, nsites, return_combined=return_combined, transpose_bonds=transpose_bonds,
+                                  site_tens=site_tens)
 
 class BlockOperator(Block, ABC):
 
@@ -653,12 +665,13 @@ class BlockOperator(Block, ABC):
 
         if return_combined:
             out = qtn.tensor_contract(*Aeff.tensors, *site_tens.tensors)
-            out = out * Aeff.exponent + self.ket.exponent
+            out = out * 10 ** (Aeff.exponent + self.ket.exponent)
             if transpose_bonds is not None:
                 out.transpose(*transpose_bonds, inplace=True)
         else:
             out = qtn.TensorNetwork([*Aeff.tensors, *site_tens])
             out.exponent = Aeff.exponent + self.ket.exponent
+            print('proj Ax exp', out.exponent, Aeff.exponent, self.ket.exponent)
         return out
 
 

@@ -1,7 +1,5 @@
-import pdb
+import os, sys
 
-import numpy as np
-import os, sys, time, glob
 sys.path.append('../')
 
 from setup_.paths import save_dir, main_dir
@@ -13,13 +11,13 @@ from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 import setup_.helper as helper_test
 from grid1D import Grid1D
-from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 # from pde_vlasovEM import VlasovMaxwell
 from pde_Aphi import VectorPotential
 
-from test_vlasovEM_conservation_compress import compress_conservative
-
+from pde_Aphi_conservation_compress_glob import compress_conservative as compress_conservative
+from pde_Aphi_conservation_compress_loc import compress_conservative as compress_conservative_loc
+from pde_Aphi_conservation_compress_loc_2 import compress_conservative as compress_conservative_loc_2
 
 """
 dipole radiation from current source (2D)
@@ -338,6 +336,7 @@ while nt < num_tsteps:
 
     nt += 1
     print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
+    print('max bonds', ap_sys.A.max_bonds())
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
 
@@ -381,26 +380,43 @@ while nt < num_tsteps:
         print('(1) B nrg', ap_sys.global_B_nrg())
         print('(1) momentum', ap_sys.global_momentum())
 
-        print('ap sys dAdt', ap_sys.dAdt)
-        if ap_sys.dAdt is None:
+        if ap_sys.dAdt is None or ap_sys.dAdt.num_active == 0:
             dAdt = ap_sys.compute_dAdt(dt)
         else:
             dAdt = ap_sys.dAdt
 
-        compress_conservative(coord_sys,
-                              ap_sys.A, ap_sys.dAdt, ap_sys.phi,
-                              rank=None, cutoff=1.0e-6,
-                              num_opt=4, direction=1)
+        print('A max bond', ap_sys.A.max_bonds())
+        print('dAdt max bond', dAdt.max_bonds())
+        pdb.set_trace()
 
-        print('ap sys Az', ap_sys.A[Z])
+        # compress_conservative(coord_sys,
+        #                       ap_sys.A, dAdt, ap_sys.phi,
+        #                       rank=None, cutoff=1.0e-6,
+        #                       num_opt=4, direction=1)
+        compress_conservative_loc(coord_sys, 2,
+                                  ap_sys.A, dAdt, ap_sys.phi,
+                                  # rank=20,
+                                  cutoff=1.0e-6,
+                                  num_opt=4, direction=1)
+        # compress_conservative_loc_2(coord_sys, 4,
+        #                           ap_sys.A, dAdt, ap_sys.phi,
+        #                           # rank=20,
+        #                           cutoff=1.0e-6,
+        #                           num_opt=4, direction=1)
+        ap_sys.dAdt = dAdt
         ap_sys.compute_B(compress_level=3)
+        print('compute E')
         ap_sys.compute_E(compress_level=3)
 
         print('(2) E nrg', ap_sys.global_E_nrg())
         print('(2) B nrg', ap_sys.global_B_nrg())
         print('(2) momentum', ap_sys.global_momentum())
+        print('compress A bonds', ap_sys.A.max_bonds())
+        print('compress dAdt max bond', ap_sys.dAdt.max_bonds())
         print('compress bonds', ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
         pdb.set_trace()
+
+        ap_sys.dAdt = None
 
 if save_data:
 

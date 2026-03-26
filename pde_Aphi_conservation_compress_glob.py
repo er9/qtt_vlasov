@@ -1,6 +1,8 @@
+import pdb
+
 import numpy as np
 import os, sys, time, glob
-sys.path.append('../')
+sys.path.append('/')
 
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
@@ -38,6 +40,7 @@ def E_nrg_blocks(coord_sys: CartesianCoordinateSpace, compID, dAdt: Field, phi: 
     blocks = {}
     if dAdt_data is not None:
         blocks[(3+ix, 3+ix)] = [BlockVector_DMRG(dAdt_data, dAdt_data, cur_orthog=cur_orthog)]
+        # print('E block', blocks[(3 + ix, 3 + ix)][-1].norm())
         if phi_data is not None:
             ddx = ddx.scalar_multiply(-2)
             blocks[(3+ix, 7)] = [BlockOperator_DMRG(dAdt_data, phi_data, ddx, cur_orthog=cur_orthog)]
@@ -77,14 +80,18 @@ def B_nrg_blocks(coord_sys: CartesianCoordinateSpace, compID, A: Field,
             # print('tmp fro norm', helper_quimb.norm(tmp))
             ddx1_2 = helper_quimb.apply(helper_quimb.mpo_conj_transpose(ddx1), ddx1)
             blocks[(i2,i2)] = [BlockOperator_DMRG(vec1_data, vec1_data, ddx1_2, cur_orthog=cur_orthog)]
-            # print('block norm', np.sqrt(blocks[(i2,i2)][-1].norm()))
+            # print('block norm', blocks[(i2,i2)][-1].norm())
+            # print('B block i2', helper_quimb.norm(vec1_data))
+
     if vec2_data is not None:
         if ddx2 is not None:
             # tmp = helper_quimb.apply(ddx2, vec2_data)
             # print('tmp fro norm', helper_quimb.norm(tmp))
             ddx2_2 = helper_quimb.apply(helper_quimb.mpo_conj_transpose(ddx2), ddx2)
             blocks[(i1,i1)] = [BlockOperator_DMRG(vec2_data, vec2_data, ddx2_2, cur_orthog=cur_orthog)]
-            # print('block norm', np.sqrt(blocks[(i1, i1)][-1].norm()))
+            # print('block norm', blocks[(i1, i1)][-1].norm())
+            # print('B block i2', helper_quimb.norm(vec2_data))
+
     if vec1_data is not None and vec2_data is not None:
         if ddx1 is not None and ddx2 is not None:
             op = helper_quimb.apply(helper_quimb.mpo_conj_transpose(ddx1), ddx2)
@@ -99,28 +106,36 @@ def momentum_blocks(coord_sys: CartesianCoordinateSpace,
     """ integ (E x B)_i dx
         px:  <Ey | Bz> - <Ez | By>
         py:  <Ez | Bx> - <Ex | Bz>
-        pz:  <Ex | By> - <By | Ex>
+        pz:  <Ex | By> - <Ey | Bx>
+
+        Bx: d/dy Az - d/dz Ay
+        By: d/dz Ax - d/dx Az
+        Bz: d/dx Ay - d/dy Ax
     """
     i = compID.type  # self.ax_coords[axID]
     i1, i2 = (i + 1) % 3, (i + 2) % 3
 
     c1_ = coord_sys.type_coords.get(i1, None)
     c2_ = coord_sys.type_coords.get(i2, None)
+    # print('i0', i, 'i1', i1, 'i2', i2)
+    # print('c0', compID, 'c1', c1_, 'c2', c2_)
 
-    ax1 = coord_sys.get_axis(compID)
-    ax2 = coord_sys.get_axis(c1_)
-    ax3 = coord_sys.get_axis(c2_)
-    ddx1 = A.grid.get_firstderivative_mpo(ax1).data if ax1 is not None else None
-    ddx2 = A.grid.get_firstderivative_mpo(ax2).data if ax2 is not None else None
-    ddx3 = A.grid.get_firstderivative_mpo(ax3).data if ax3 is not None else None
+    # ax1 = coord_sys.get_axis(compID)
+    # ax2 = coord_sys.get_axis(c1_)
+    # ax3 = coord_sys.get_axis(c2_)
+    # ddx1 = A.grid.get_firstderivative_mpo(ax1).data if ax1 is not None else None
+    # ddx2 = A.grid.get_firstderivative_mpo(ax2).data if ax2 is not None else None
+    # ddx3 = A.grid.get_firstderivative_mpo(ax3).data if ax3 is not None else None
 
-    coords = [compID, c1_, c2_]
-    axes = [ax1, ax2, ax3]
-    ddxs = [ddx1, ddx2, ddx3]
+    coords = coord_sys.coords
+    axes = [coord_sys.get_axis(compID) for compID in coords]   # A.grid.axes + (None,)*(3-A.grid.ndim)
+    ddxs = [A.grid.get_firstderivative_mpo(ax).data if ax is not None else None for ax in axes]
 
     phi_data = phi.component.data
 
     ## Bz = d/dx Ay - d/dy Ax
+    ## Bx = d/dy Az - d/dz Ay
+    ## By = d/dz Ax - d/dx Az
     k1, k2 = (i2 + 1) % 3, (i2 + 2) % 3
     op1 = ddxs[k1] if ddxs[k1] is not None else None
     A1 = A[coords[k2]] if coords[k2] is not None else None
@@ -135,22 +150,27 @@ def momentum_blocks(coord_sys: CartesianCoordinateSpace,
     if A1 is not None and A1.data is not None:
         if phi_data is not None and op3 is not None:
             op31 = helper_quimb.apply( helper_quimb.mpo_conj_transpose(op3), op1)
-            blocks[(7, coords[k2].value)] = BlockOperator_DMRG(A1.data, phi_data, op31, cur_orthog=cur_orthog)
-        if dAdt_4 is not None and dAdt_4.data is not None:
+            blocks[(7, coords[k2].type.value)] = [BlockOperator_DMRG(A1.data, phi_data, op31, cur_orthog=cur_orthog)]
+        if dAdt_4 is not None and dAdt_4.data is not None and op1 is not None:
             op41 = helper_quimb.scalar_multiply(op1, -1, inplace=False)
-            blocks[(c1_.value + 3, coords[k2].value)] = BlockOperator_DMRG(A1.data, dAdt_4.data, op41,
-                                                                           cur_orthog=cur_orthog)
+            # op41 = op1.copy()
+            blocks[(c1_.type.value + 3, coords[k2].type.value)] = [BlockOperator_DMRG(A1.data, dAdt_4.data, op41,
+                                                                           cur_orthog=cur_orthog)]
 
     if A2 is not None and A2.data is not None:
         if phi_data is not None and op3 is not None:
             op32 = helper_quimb.apply(helper_quimb.mpo_conj_transpose(op3), op2)
-            blocks[(7, coords[k1].value)] = BlockOperator_DMRG(A2.data, phi_data, op32, cur_orthog=cur_orthog)
-        if dAdt_4 is not None and dAdt_4.data is not None:
-            op42 = helper_quimb.scalar_multiply(op2, -1, inplace=False)
-            blocks[(c1_.value + 3, coords[k1].value)] = [BlockOperator_DMRG(A2.data, dAdt_4.data, op42,
+            helper_quimb.scalar_multiply(op32, -1, inplace=True)
+            blocks[(7, coords[k1].type.value)] = [BlockOperator_DMRG(A2.data, phi_data, op32, cur_orthog=cur_orthog)]
+        if dAdt_4 is not None and dAdt_4.data is not None and op2 is not None:
+            # op42 = helper_quimb.scalar_multiply(op2, -1, inplace=False)
+            op42 = op2.copy()
+            blocks[(c1_.type.value + 3, coords[k1].type.value)] = [BlockOperator_DMRG(A2.data, dAdt_4.data, op42,
                                                                             cur_orthog=cur_orthog)]
 
-    ## By = d/dx Az - d/dz Ax
+    ## By = d/dz Ax - d/dx Az
+    ## Bz = d/dx Ay - d/dy Ax
+    ## Bx = d/dy Az - d/dz Ay
     j1, j2 = (i1 + 1) % 3, (i1 + 2) % 3
     op1 = ddxs[j1] if ddxs[j1] is not None else None
     A1 = A[coords[j2]] if coords[j2] is not None else None
@@ -164,21 +184,23 @@ def momentum_blocks(coord_sys: CartesianCoordinateSpace,
     if A1 is not None and A1.data is not None:
         if phi_data is not None and op3 is not None:
             op31 = helper_quimb.apply(helper_quimb.mpo_conj_transpose(op3), op1)
-            key = (7, coords[j2].value)
+            key = (7, coords[j2].type.value)
             blocks[key] = blocks.get(key, []) + [BlockOperator_DMRG(A1.data, phi_data, op31, cur_orthog=cur_orthog)]
-        if dAdt_4 is not None and dAdt_4.data is not None:
+        if dAdt_4 is not None and dAdt_4.data is not None and op1 is not None:
             op41 = helper_quimb.scalar_multiply(op1, -1, inplace=False)
-            key = (c2_.value + 3, coords[j2].value)
+            key = (c2_.type.value + 3, coords[j2].type.value)
             blocks[key] = blocks.get(key, []) + [BlockOperator_DMRG(A1.data, dAdt_4.data, op41, cur_orthog=cur_orthog)]
 
     if A2 is not None and A2.data is not None:
         if phi_data is not None and op3 is not None:
             op32 = helper_quimb.apply(helper_quimb.mpo_conj_transpose(op3), op2)
-            key = (7, coords[j1].value)
+            helper_quimb.scalar_multiply(op32, -1, inplace=True)
+            key = (7, coords[j1].type.value)
             blocks[key] = blocks.get(key, []) + [BlockOperator_DMRG(A2.data, phi_data, op32, cur_orthog=cur_orthog)]
-        if dAdt_4 is not None and dAdt_4.data is not None:
-            op42 = helper_quimb.scalar_multiply(op2, -1, inplace=False)
-            key = (c2_.value + 3, coords[j1].value)
+        if dAdt_4 is not None and dAdt_4.data is not None and op2 is not None:
+            # op42 = helper_quimb.scalar_multiply(op2, -1, inplace=False)
+            op42 = op2.copy()
+            key = (c2_.type.value + 3, coords[j1].type.value)
             blocks[key] = blocks.get(key, []) + [BlockOperator_DMRG(A2.data, dAdt_4.data, op42, cur_orthog=cur_orthog)]
 
     return blocks
@@ -196,10 +218,10 @@ def measure_errors(block_dict: dict[tuple[int,int], list[Block]],
     expec_errs_dict = {}  ## expectation values of overlaps w/o weights
 
     base_tens_dict = {k: qtn.tensor_contract(*tens) for k, tens in base_dict.items()}
-    print('block dict', block_dict)
+    # print('block dict', block_dict)
 
     for k, blocks in block_dict.items():
-        print('k blocks', k)
+        # print('k blocks', k)
         bra_key, ket_key = k
         bra_errs = errs_dict.get(bra_key, None)
         ket_errs = errs_dict.get(ket_key, None)
@@ -208,7 +230,8 @@ def measure_errors(block_dict: dict[tuple[int,int], list[Block]],
         tot_bra_err, tot_ket_err, tot_bk_err = None, None, None
 
         for block in blocks:
-            print('block', block, 'expec', block.norm())
+            # print('block', block, 'expec', block.norm())
+
             ket_err_tn = None
             if ket_errs is not None:
                 ket_err_tens, ket_err_weights = ket_errs
@@ -220,11 +243,14 @@ def measure_errors(block_dict: dict[tuple[int,int], list[Block]],
 
             b2k = block.projected_bra_to_ket(cur_orthog, 1)
             k2b = {v: k for k, v in b2k.items()}
+            if block.operator is None:
+                k2b.pop(block.ket.site_ind(cur_orthog))
             bra_base_tens = base_tens_dict[bra_key]
             bra_base_tens = bra_base_tens.reindex(k2b)
             if bra_errs is not None:
                 bra_err_tens, bra_err_weights = bra_errs
-                bra_err_tens = bra_err_tens.reindex(k2b)
+                if bra_err_tens is not None:
+                    bra_err_tens = bra_err_tens.reindex(k2b)
             else:
                 bra_err_tens = None
 
@@ -264,8 +290,14 @@ def measure_errors(block_dict: dict[tuple[int,int], list[Block]],
 
             if bra_err_tens is not None and ket_err_tn is not None:
                 bra_err_tens_ = bra_err_tens.reindex({'_weights_': '_weights_b_'}, inplace=False)
+                # print('bra tens', bra_err_tens_, bra_err_tens_.data)
+                # print('ket tens', ket_err_tens, ket_err_tens.data)
+                proj_ket = qtn.tensor_contract(*ket_err_tn.tensors)
+                proj_ket = proj_ket * 10 ** ket_err_tn.exponent
+                # print('proj ket norm', proj_ket.norm(), ket_err_tn.exponent)
                 err = qtn.tensor_contract(*ket_err_tn.tensors, bra_err_tens_)
                 err = err * 10**(ket_err_tn.exponent + block.bra.exponent)
+                # print('bk err', err)
 
                 err.transpose('_weights_b_', '_weights_', inplace=True)
                 expec_errs += np.einsum('a,ab,b->', bra_err_weights, err.data, ket_err_weights)
@@ -284,6 +316,7 @@ def measure_errors(block_dict: dict[tuple[int,int], list[Block]],
         # tmp = bra_err_weights @ tot_bk_err @ ket_err_weights + tot_bra_err @ bra_err_weights + tot_ket_err @ ket_err_weights
         # print('target val', tot_expec_errs, tmp)
 
+        # print('k', k, tot_bk_err)
         expec_errs_dict[k] = (tot_bra_err, tot_ket_err, tot_bk_err)
         expec_dict[k] = (tot_expec_base, tot_expec_errs)
 
@@ -332,15 +365,25 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
     py_blocks = momentum_blocks(coord_sys, Y, A, dAdt, phi, i)
     pz_blocks = momentum_blocks(coord_sys, Z, A, dAdt, phi, i)
 
+    print('Bx nrg blocks', Bx_nrg_blocks)
+    print('By nrg blocks', By_nrg_blocks)
+    print('Bz nrg blocks', Bz_nrg_blocks)
+
     print('Ex nrg blocks', Ex_nrg_blocks)
     print('Ey nrg blocks', Ey_nrg_blocks)
     print('Ez nrg blocks', Ez_nrg_blocks)
+
+    print('px blocks', px_blocks)
+    print('py blocks', py_blocks)
+    print('pz blocks', pz_blocks)
 
     all_blocks = (Ex_nrg_blocks, Ey_nrg_blocks, Ez_nrg_blocks,
                   Bx_nrg_blocks, By_nrg_blocks, Bz_nrg_blocks,
                   px_blocks, py_blocks, pz_blocks)
 
     for i in (range(L - 1) if direction > 0 else range(L-1, 0, -1)):
+
+        print(f'\nSite {i}')
 
         base_mps = {}
         base_tens: dict[int, tuple[qtn.Tensor, qtn.Tensor]] = {}
@@ -381,6 +424,10 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
         len_coeffs = {ii: len(ec) for ii, ec in error_coeffs.items() if ec is not None}
         tot_len_coeffs = sum(len_coeffs.values())
 
+
+        # print('A', A.components if A is not None else None)
+        # print('dAdt', dAdt.components if dAdt is not None else None)
+
         ## get enough d.o.f for 9 constraints
         ## but some of them might not matter? / be automatically satisfied bc 0.
         print('num opt', num_opt)
@@ -389,7 +436,7 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
             num_opt = np.ceil(9 / len(len_coeffs)) * 3
             print('num opt', num_opt)
 
-        num_opt = 5  # 6  # min(6, max(2, tot_len_coeffs - 2) )
+        num_opt = 12  # 10  # 6  # min(6, max(2, tot_len_coeffs - 2) )
         print('num opt', num_opt, tot_len_coeffs)
 
         len_coeffs_red = {ii: min(num_opt, lc) for ii, lc in len_coeffs.items()}
@@ -405,16 +452,25 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
         if tot_len_coeffs_red > 0:  # > number of constraints
 
             ### compute compression error
+            print('Bx error')
             Bx_expec_vals, Bx_expec_errs_dict = measure_errors(Bx_nrg_blocks, base_tens, error_terms, i)
+            print('By error')
             By_expec_vals, By_expec_errs_dict = measure_errors(By_nrg_blocks, base_tens, error_terms, i)
+            print('Bz error')
             Bz_expec_vals, Bz_expec_errs_dict = measure_errors(Bz_nrg_blocks, base_tens, error_terms, i)
 
+            print('Ex error')
             Ex_expec_vals, Ex_expec_errs_dict = measure_errors(Ex_nrg_blocks, base_tens, error_terms, i)
+            print('Ey error')
             Ey_expec_vals, Ey_expec_errs_dict = measure_errors(Ey_nrg_blocks, base_tens, error_terms, i)
+            print('Ez error')
             Ez_expec_vals, Ez_expec_errs_dict = measure_errors(Ez_nrg_blocks, base_tens, error_terms, i)
 
+            print('px error')
             px_expec_vals, px_expec_errs_dict = measure_errors(px_blocks, base_tens, error_terms, i)
+            print('py error')
             py_expec_vals, py_expec_errs_dict = measure_errors(py_blocks, base_tens, error_terms, i)
+            print('pz error')
             pz_expec_vals, pz_expec_errs_dict = measure_errors(pz_blocks, base_tens, error_terms, i)
 
 
@@ -515,20 +571,36 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
             print('error coeffs', error_coeffs)
             x0 = coeffs_to_vec(error_coeffs)
             print('x0', x0, 'tot cost', tot_cost(x0))
-            # result = scipy.optimize.minimize(tot_cost, x0, bounds=[(0, x0i*100) for x0i in x0],
-            #                                  jac=tot_jac,  #hess=tot_hess)
-            #                                  tol=1.0e-12,
-            #                                  )
-            # print('opt result', result.x, 'tot cost', tot_cost(result.x))
-            # print('opt result', result.x, result.fun, result.success)
 
-            result = scipy.optimize.least_squares(tot_cost, x0, bounds=(np.zeros(tot_len_coeffs_red), x0 * 100),
-                                                  jac=tot_jac,
-                                                  )
-            # print('opt result', result.x, 'tot cost', tot_cost(result.x))
-            print('opt result', result.x, result.cost, result.fun, result.success)
-            opt_weights = vec_to_coeffs(result.x)
-            # opt_weights = error_coeffs
+            if np.linalg.norm(tot_cost(x0)) > 1.0e-12:
+                # print('error coeffs', error_coeffs)
+                # x0 = coeffs_to_vec(error_coeffs)
+                # print('x0', x0, 'tot cost', tot_cost(x0))
+                # result = scipy.optimize.minimize(tot_cost, x0, bounds=[(0, x0i*100) for x0i in x0],
+                #                                  jac=tot_jac,  #hess=tot_hess)
+                #                                  tol=1.0e-12,
+                #                                  )
+                # print('opt result', result.x, 'tot cost', tot_cost(result.x))
+                # print('opt result', result.x, result.fun, result.success)
+
+                result = scipy.optimize.least_squares(tot_cost, x0, bounds=(np.zeros(tot_len_coeffs_red), x0 * 100),
+                                                      jac=tot_jac,
+                                                      )
+                # print('opt result', result.x, 'tot cost', tot_cost(result.x))
+                print('opt result', result.x, result.cost, result.fun, tot_cost(result.x),
+                      np.linalg.norm(result.fun)**2 / len(result.x), result.success)
+
+                opt_weights = vec_to_coeffs(result.x)
+
+            else:
+                opt_weights = vec_to_coeffs(x0)
+
+            # # opt_weights = vec_to_coeffs(result.x)
+            # if np.linalg.norm(x0)**2 < result.cost:
+            #     opt_weights = error_coeffs
+            #     print('using initial error coeffs')
+            # else:
+            #     opt_weights = vec_to_coeffs(result.x)
 
             ### pad compressed MPS with contributions in opt weights
             for ii in range(7):
@@ -656,17 +728,19 @@ def get_cost_func(len_coeffs: dict[int, int], num_r: int, target_val:Numeric,
                 bk_mat[xb: xb + num_rb, xk: xk + num_rk] = bk_errs[:num_rb, :num_rk]
                 # if len(bk_errs) > 0:  it_bk += 1
 
+    # print('bk mat', bk_mat)
+    # print('b vec', b_vec)
+    # print('k vec', k_vec)
+
     def cost(weights: np.ndarray):
         if (target_val == 0. and np.linalg.norm(bk_mat) == 0. and np.linalg.norm(b_vec) == 0.
                 and np.linalg.norm(k_vec) == 0):
             return 0.0
+
         # print('weights', weights)
-        # print('bk mat', bk_mat)
-        # print('b vec', b_vec)
-        # print('k vec', k_vec)
-        # print('out', weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights, target_val)
-        # print('out', (weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights - target_val)**2 / target_val**2)
-        # return (weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights - target_val)**2 / target_val**2
+
+        # print('cost', (weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights - target_val), target_val)
+        # print('cost', (weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights - target_val) / target_val)
         return (weights @ bk_mat @ weights + b_vec @ weights + k_vec @ weights - target_val) / target_val
 
     def jac(weights: np.ndarray):
@@ -752,7 +826,7 @@ def compress_i_remainder(mps: 'qtn.MatrixProductState', cur_orthog:int, directio
                                inds=(*left_inds, *right_inds, '_weights_'))
             # TR_ = qtn.tensor_contract(TR_, new_mps[cur_orthog + 1])
             weights_ = TS.data[cut_ind:]
-            print('weights', cut_ind, weights_, TS.data)
+            # print('weights', cut_ind, weights_, TS.data)
         else:
             weights_, TL_, TR_, tens_ = None, None, None, None
 

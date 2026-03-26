@@ -87,7 +87,7 @@ class PDE_system:
         self.te_order = te_order
         self.time = 0    # can use to keep track of time
         self.dt = 0
-        self.grid = grid
+        self.grid = fields[0].grid if grid is None else grid
 
         self.do_normalization = normalize
         self.conservative = conservative

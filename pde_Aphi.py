@@ -232,6 +232,7 @@ class VectorPotential(PDE_system):
         if self.dAdt is None or self.dAdt.num_active == 0:
             dAdt = self.compute_dAdt(self.dt)
         else:
+            print('dAdt is not None')
             dAdt = self.dAdt
         dAdt = dAdt.scalar_multiply(-1, inplace=False)
         # print('dAdt', dAdt.components)
@@ -346,22 +347,24 @@ class VectorPotential(PDE_system):
         comps = self.coords_x.coords
         other_comps = comps
 
+        dx3 = 1  # np.prod([ax.dx for ax in self.grid.axes])
+
         out = {}
         for i in range(3):
             c0 = comps[i]
             c1, c2 = comps[(i + 1) % 3], other_comps[(i + 2) % 3]
 
             try:
-                out_comp_1 = E_field[c1].meas_expec(B_conj[c2])
+                out_comp_1 = E_field[c1].ovlp(B_conj[c2]) * dx3
             except KeyError:
                 out_comp_1 = 0.0
 
             try:
-                out_comp_2 = E_field[c2].meas_expec(B_conj[c1])
+                out_comp_2 = E_field[c2].ovlp(B_conj[c1]) * dx3
             except KeyError:
                 out_comp_2 = 0.0
 
-            out[c0] = out_comp_1 + out_comp_2
+            out[c0] = (out_comp_1 - out_comp_2)
 
         return out
 
@@ -682,8 +685,10 @@ class VectorPotential(PDE_system):
             all_mpos[(it, it + 3)] = self.grid_X.get_iden_mpo()
 
             ax = self.coords_x.get_axis(compID.type)
-            ddx_mpo = self.grid_X.get_firstderivative_mpo(ax, deriv_config=phi_ax_deriv_configs[ax])
-            all_mpos[(7, it)] = ddx_mpo.scalar_multiply(-c2)
+            print('ax', ax)
+            if ax is not None:
+                ddx_mpo = self.grid_X.get_firstderivative_mpo(ax, deriv_config=phi_ax_deriv_configs[ax])
+                all_mpos[(7, it)] = ddx_mpo.scalar_multiply(-c2)
 
         return all_mpos
 
@@ -997,10 +1002,12 @@ class VectorPotential(PDE_system):
                 else:
                     dmrg_vecs = self.grid_X.gtn_to_dmrg_format(gtns, is_mps=is_mps)
                     # dmrg_vecs.distribute_exponent()
-                converted_dict[k] = dmrg_vecs
+
+                if dmrg_vecs is not None:
+                    converted_dict[k] = dmrg_vecs
             return converted_dict
 
-        compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+        compress_opts = new_sys.A.compress_config.get_compress_opts(1).copy()
         max_bond = compress_opts.get('max_bond', None)
         cutoff = compress_opts.get('cutoff', CUTOFF)
         print('max bond', max_bond)

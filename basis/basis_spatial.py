@@ -387,6 +387,9 @@ class SpatialBasis(Basis):
         ## why? averaging over num grid points bc dx with be scaled by q**depth
         ## also remove * dx multiplication
 
+        if depth == ax.L:
+            return ax.get_integral_mps(site_tag_id=site_tag_id, site_ind_id=lower_ind_id)
+
         coarse_ax = Axis(ax.L - depth, q=ax.q, dx=ax.dx*(ax.q**depth))
         coarse_iden = coarse_ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id)
 

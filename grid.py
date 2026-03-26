@@ -928,6 +928,22 @@ class Grid:
     ### build derivative and integral operators ###
     ###############################################
 
+    def get_partial_integrator(self, integ_axes: Sequence['Axis']):
+        mpss = {}
+        for ax in integ_axes:
+            mpss[ax] = ax.get_integral_mps()
+        return self.make_mpx_ndim(mpss)
+
+    def get_finescale_integrator(self, num_coarse: int, axes: Sequence['Axis'] = None):
+        axes = self.axes if axes is None else axes
+        mpxs = {}
+        for ax in axes:
+            depth = ax.L - int(np.ceil(np.log10(num_coarse) / np.log10(ax.q)))
+            mpxs[ax] = ax.get_coarse_grain_mpx(depth)
+        if num_coarse == 1:
+            return self.make_mps_ndim(mpxs)
+        return self.make_mpo_ndim(mpxs)
+
     def get_xmultiply_mps(self, x_axes: Sequence['Axis'] or None = None, x_power=1,
                           offsets: dict['Axis', Numeric] = None, scales: dict['Axis', Numeric] = None,
                           recalc=False, store=True, compress_opts: dict = None) -> 'GTN_TYPE':
