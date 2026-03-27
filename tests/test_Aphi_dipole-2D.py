@@ -21,7 +21,7 @@ from pde_Aphi import VectorPotential
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = True
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -42,7 +42,7 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    dnum = f'260225_run{run}'
+    dnum = f'260326_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:

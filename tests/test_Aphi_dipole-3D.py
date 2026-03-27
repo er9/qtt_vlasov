@@ -21,7 +21,7 @@ from pde_Aphi import VectorPotential
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = True  # False
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -42,23 +42,18 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    if run == 1:       # Lx = 40 * lam
-        dnum = 250423
-        # dnum = 250517
-    elif run == 2:     # Lx = 10 * lam
-        dnum = 250505
-        # dnum = 250518  # 250505
+    dnum = f'260326_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
         fnum = f'{dnum}/eta{dissipation}_c{comp_style}_m{deriv_order}/'
 
     if do_full:
-        sdir = f'{save_dir}/data{fnum}/EM_jz3D_full/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz3D_full/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz3D_full/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz3D_full/'
     else:
-        sdir = f'{save_dir}/data{fnum}/EM_jz3D/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz3D/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz3D/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz3D/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
@@ -332,18 +327,20 @@ while nt < num_tsteps:
             max_bond_dAdts += [dAdt_bonds]
         max_bond_phis += [phi_bonds]
 
-    print('ap sys dt', ap_sys.dt, dt)
-    ap_sys.compute_E(compress_level=1)
-    ap_sys.compute_B(compress_level=1)
-    nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
-    nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
+    # print('ap sys dt', ap_sys.dt, dt)
+    # ap_sys.compute_E(compress_level=1)
+    # ap_sys.compute_B(compress_level=1)
+    # nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
+    # nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
 
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
+        ap_sys.compute_E(compress_level=1)
+        ap_sys.compute_B(compress_level=1)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})
