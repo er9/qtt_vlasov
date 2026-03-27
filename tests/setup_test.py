@@ -618,15 +618,26 @@ def load_data_Aphi(fstr,
                     print('dAdt not found')
                     pass
 
+            print('loading ranks')
             max_bond_A = pickle.load(open(sdir + 'restart/maxD_A_' + re_fstr + f'.pkl', 'rb'))
-            max_bond_phi = pickle.load(open(sdir + 'restart/maxD_phi_' + re_fstr + f'.pkl', 'rb'))
+            try:
+                max_bond_phi = pickle.load(open(sdir + 'restart/maxD_phi_' + re_fstr + f'.pkl', 'rb'))
+            except IOError:
+                max_bond_phi = [np.nan]
+
             try:
                 max_bond_dAdt = pickle.load(open(sdir + 'restart/maxD_dAdt_' + re_fstr + f'.pkl', 'rb'))
             except IOError:
                 max_bond_dAdt = [np.nan]
 
-            nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
-            nrg_B_ts = pickle.load(open(sdir + 'restart/nrg_B_' + re_fstr + f'.pkl', 'rb'))
+            try:
+                nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
+                nrg_B_ts = pickle.load(open(sdir + 'restart/nrg_B_' + re_fstr + f'.pkl', 'rb'))
+            except IOError:
+                nrg_E_ts = [np.nan]
+                nrg_B_ts = [np.nan]
+
+            print('loading t')
             ts = pickle.load(open(sdir + 'restart/ts_' + re_fstr + f'.pkl', 'rb'))
             ts = list(ts)
             print('loaded', nt, len(nrg_E_ts))

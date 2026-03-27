@@ -413,7 +413,7 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < (16 if max_bond is None else max_bond))]
+            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < (16 if max_bond is None else max_bond // 2))]
             print('expand kets', expand_kets)
             if not expand_kets:
                 print('canonize (no expand)')
