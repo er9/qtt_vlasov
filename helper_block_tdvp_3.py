@@ -57,7 +57,7 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
                shared_projs: list[set] = None,
                backward_weights: dict[tuple[int, int], float]=None,
                do_adapt=True,
-               te_order=4, grid=None,  **solver_kwargs):
+               te_order=4, grid=None, return_info=False,  **solver_kwargs):
     print('BLOCK TDVP 3')
 
     # x_vecs = {k: x for k, x in x_vecs.items() if helper_quimb.norm(x) > np.sqrt(CUTOFF)}
@@ -137,6 +137,8 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
+    elif return_info:
+        return solver.kets, {'num_evals': solver.num_evals}
     else:
         return solver.kets
 
