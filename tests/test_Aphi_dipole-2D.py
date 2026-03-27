@@ -353,8 +353,8 @@ while nt < num_tsteps:
           DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
-        ap_sys.compute_E(compress_level=1)
-        ap_sys.compute_B(compress_level=1)
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data()

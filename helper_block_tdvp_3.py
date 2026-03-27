@@ -51,13 +51,13 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
                b_vecs: dict[int, Sequence['MPS_type']] = None,
                masks: dict[int, Sequence['MPO_type']] = None,
                verbose_output=False,
-               init_direction=SweepDirection.RIGHT,
+               init_direction=SweepDirection.LEFT,
                constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
                constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                shared_projs: list[set] = None,
                backward_weights: dict[tuple[int, int], float]=None,
                do_adapt=True,
-               te_order=4, grid=None,  **solver_kwargs):
+               te_order=4, grid=None, return_info=False, **solver_kwargs):
     print('BLOCK TDVP 3')
 
     # x_vecs = {k: x for k, x in x_vecs.items() if helper_quimb.norm(x) > np.sqrt(CUTOFF)}
@@ -76,10 +76,9 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
     ## taking out exponent requires some care? modifying Ax * 10**-exponent didn't work?
     ## causes issues if exponent is not distributed
 
-    # for k, As in A_mats.items():
-    #     for A in As:
-    #         A.distribute_exponent()
-
+    for k, As in A_mats.items():
+        for A in As:
+            A.distribute_exponent()
 
     ## targeting so sources, masks all exist on the same manifold
     if b_vecs is not None:
@@ -133,10 +132,21 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
                                grid=grid, backward_weights=backward_weights,
                                **solver_kwargs)
 
-    solver.take_time_step(dt, init_direction=init_direction, do_adapt=do_adapt)
+    solver.take_time_step(dt/2, init_direction=init_direction, do_adapt=do_adapt)
+
+    x_vecs = solver.kets
+    solver = BlockTDVPSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
+                             te_order=te_order, direction=init_direction,
+                             constraints=constraints, constraint_vals=constraint_vals,
+                             grid=grid, backward_weights=backward_weights,
+                             **solver_kwargs)
+
+    solver.take_time_step(dt/2, init_direction=init_direction * -1, do_adapt=do_adapt)
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
+    elif return_info:
+        return solver.kets, {'num_evals': solver.num_evals}
     else:
         return solver.kets
 
@@ -374,6 +384,7 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         # old_sites = {}
         x_ind = None
         for ii, ket in self.states_dict.items():
+            print('state ii', ii)
             try:
                 # old_sites[ii] = ket[i].copy()
 
@@ -509,6 +520,7 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
                     ## standard SVD
                     q, r = helper_dmrg.tensor_svd(new_ket_tens, left_inds, absorb='right', max_bond=self.max_bond,
                                                   cutoff=self.cutoff, bond_ind=x_ind)
+                    # print('new Q', q.shape)
                 else:
                     ## expand q before doing backwards TE
                     ## extra_dict[ii]:  A[oo,ii] * x[ii] for each ii
@@ -516,6 +528,7 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
                     q, r = helper_dmrg.get_expanded_qr([new_ket_tens, *extra_dict[ii]], left_inds,
                                                        max_bond=self.max_bond, cutoff=CUTOFF, bond_ind=x_ind)
 
+                # pdb.set_trace()
 
                 # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
                 q.transpose_like(ket[i1], inplace=True)

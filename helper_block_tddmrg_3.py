@@ -390,10 +390,17 @@ class BlockTimeIntegrator:
             ### expand basis of initial state using sources
             if sources is not None and (self.term_class is Term_DMRG):
                 for k, src_kets in sources.items():     ## a list of MPS
+                    print('target source', k)
                     x_ket = x_state.get(k, None)
                     x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False,
                                                 direction=self.direction * -1)
+                    x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False,
+                                                direction=self.direction * -1)
                     x_state[k] = x_ket
+
+            print('source expanded x state')
+            for k, ket in x_state.items():
+                print('k', k, helper_quimb.inner_bond_sizes(ket))
 
             ### expand basis of initial state using masks
             if masks is not None and (self.term_class is Term_DMRG):
@@ -406,12 +413,15 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
+            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < 16)]
+            print('expand kets', expand_kets)
             if not expand_kets:
                 print('canonize (no expand)')
                 self.canonize(i)
             else:
                 print('expand ket')
-                x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
+                x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff,
+                                           kets_to_expand=expand_kets)
                 # self.verbose = True
                 # try:
                 #     x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
@@ -426,8 +436,9 @@ class BlockTimeIntegrator:
                 ket[i].modify(apply=lambda x: x * 10**ket.exponent)
                 ket.exponent = 0.0
 
-            # for k, v in x_state.items():
-            #     print('init ket post canonize', k, v)
+            print('fully expanded ket')
+            for k, v in x_state.items():
+                print('init ket post canonize', k, helper_quimb.inner_bond_sizes(v))
 
             self.states_dict: dict[int, MPS] = x_state
             self.self_terms: dict[int, Term] = {}
@@ -456,7 +467,7 @@ class BlockTimeIntegrator:
     def expand_kets(cls, target_orthog: int, kets: dict[int, qtn.MatrixProductState],
                     operators: dict[tuple[int, int], Sequence[qtn.MatrixProductOperator]],
                     sources: dict[int, Sequence[qtn.MatrixProductState]] = None,
-                    max_bond: int = None, cutoff: float=None,):
+                    max_bond: int = None, cutoff: float=None, kets_to_expand=None):
 
         L = kets[next(iter(kets))].L
         if target_orthog != 0 and target_orthog != L - 1:
@@ -471,8 +482,9 @@ class BlockTimeIntegrator:
         for (oo, ii), ops in operators.items():
             if oo not in targets:
                 targets[oo] = []
-            targets[oo] += [helper_quimb.apply_zipup(op, kets[ii], compress=True, compress_opts=compress_opts)
-                            for op in ops]
+            if kets.get(ii, None) is not None:
+                targets[oo] += [helper_quimb.apply_zipup(op, kets[ii], compress=True, compress_opts=compress_opts)
+                                for op in ops]
 
         for oo, sources in sources.items():
             if oo not in targets:
@@ -482,10 +494,21 @@ class BlockTimeIntegrator:
         direction = 1 if target_orthog == L - 1 else -1
 
         for oo, mps_list in targets.items():
-            new_oo = helper_quimb.add_MPS_list([kets[oo], *mps_list], direction=direction,
-                                               compress_opts=compress_opts, do_final_update=False,
-                                               verbose=(oo==5))
-            kets[oo] = new_oo
+            if isinstance(kets_to_expand, (tuple, list)):
+                if oo not in kets_to_expand:
+                    continue
+
+            if kets.get(oo, None) is not None:
+                new_oo = helper_quimb.add_MPS_list([kets[oo], *mps_list], direction=direction,
+                                                   compress_opts=compress_opts, do_final_update=False,
+                                                   verbose=(oo==5))
+                kets[oo] = new_oo
+
+            elif len(mps_list) > 0:
+                new_oo = helper_quimb.add_MPS_list([*mps_list], direction=direction,
+                                                   compress_opts=compress_opts, do_final_update=False,
+                                                   verbose=(oo == 5), update_with_zero=True)
+                kets[oo] = new_oo
 
         return kets
 
@@ -1047,7 +1070,7 @@ class BlockTimeIntegrator:
 
         # print('update 2 site', left_site_pos)
         at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
-        print('at end TD-DMRG', left_site_pos, direction, at_end)
+        # print('at end TD-DMRG', left_site_pos, direction, at_end)
 
 
         ## update self.current_state
@@ -2129,6 +2152,11 @@ class BlockTimeIntegrator:
                     #     tens_k = out[0][k].copy()
                     #     tens_k.modify(apply=lambda x: x * 0)
                     k_targets += [tens_k]
+
+                # ## add b_eff
+                # tens_k = beff_dict.get(k, None)
+                # k_targets += [tens_k]
+
                 targets[k] = k_targets
             out = targets
             # pdb.set_trace()
@@ -2398,6 +2426,7 @@ class BlockTimeIntegrator:
             # adapt=True
             # adapt=False
             nsites = 2 if adapt else 1
+            print('nsites', nsites)
 
             ## forward propagation
             if verbose:  print('FORWARD prop sites (LR)', list(range(site_ind,site_ind+nsites)) )
@@ -2462,6 +2491,7 @@ class BlockTimeIntegrator:
             # adapt = False
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
+            print('nsites', nsites)
 
             if verbose:  print('FORWARD prop sites (RL)', list(range(cur_orthog,cur_orthog+nsites)) )
             new_xeff_dict = self._site_time_evolution(dt, cur_orthog, nsites=nsites, sweep_direction=direction)
