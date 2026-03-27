@@ -22,7 +22,7 @@ from pde_Aphi import VectorPotential
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = True  # False
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -43,23 +43,18 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    if run == 1:       # Lx = 40 * lam
-        dnum = 250423
-        # dnum = 250517
-    elif run == 2:     # Lx = 10 * lam
-        dnum = 250505
-        # dnum = 250518  # 250505
+    dnum = f'260326_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
         fnum = f'{dnum}/eta{dissipation}_c{comp_style}_m{deriv_order}/'
 
     if do_full:
-        sdir = f'{save_dir}/data{fnum}/EM_jz3D_full/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz3D_full/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz3D_full/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz3D_full/'
     else:
-        sdir = f'{save_dir}/data{fnum}/EM_jz3D/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz3D/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz3D/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz3D/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
@@ -335,7 +330,7 @@ while nt < num_tsteps:
             max_bond_dAdts += [dAdt_bonds]
         max_bond_phis += [phi_bonds]
 
-    print('ap sys dt', ap_sys.dt, dt)
+    # print('ap sys dt', ap_sys.dt, dt)
     # ap_sys.compute_E(compress_level=1)
     # ap_sys.compute_B(compress_level=1)
     # nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
@@ -344,9 +339,11 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
+        ap_sys.compute_E(compress_level=1)
+        ap_sys.compute_B(compress_level=1)
 
         ap_sys.compute_E(compress_level=3)
         ap_sys.compute_B(compress_level=3)
@@ -417,7 +414,6 @@ while nt < num_tsteps:
         plt.plot(np.array(max_bond_phis), label='phi')
         plt.legend()
         plt.tight_layout()
-
         if save_figs:
             plt.savefig(fdir + 'ranks.png')
             plt.close()
@@ -431,14 +427,30 @@ while nt < num_tsteps:
 
         test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                                   ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
-                                  max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+                                  max_bond_A=max_bond_As, 
+                                  max_bond_dAdt=max_bond_dAdts,
+                                  max_bond_phi=max_bond_phis)
 
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
+
+        for compID in ap_sys.E.componentIDs:
+            E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if E_data is not None:
+                np.save(fdir + subdir + f'E{compID}_y0-nt{nt}.npy', E_data)
+
+        for compID in ap_sys.B.componentIDs:
+            B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if B_data is not None:
+                np.save(fdir + subdir +  f'B{compID}_y0-nt{nt}.npy', B_data)
 
 if save_data:
 
     test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                               ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
-                              max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+                              max_bond_A=max_bond_As, 
+                              max_bond_dAdt=max_bond_dAdts, 
+                              max_bond_phi=max_bond_phis)
 
     ap_sys.compute_E(compress_level=3)
     ap_sys.compute_B(compress_level=3)
