@@ -413,7 +413,7 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < 16)]
+            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < (16 if max_bond is None else max_bond))]
             print('expand kets', expand_kets)
             if not expand_kets:
                 print('canonize (no expand)')
@@ -2419,9 +2419,16 @@ class BlockTimeIntegrator:
                 adapt = do_adapt
             else:
                 # max_bond_ = max_bond  # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
-                max_bond_ = min(max_bond, 2**(site_ind+1), 2**(L-site_ind-1))
+                q = 2
+                if self.grid.layout_type == LayoutType.PARALLEL_GROUP:
+                    q = 2 ** self.grid.ndim
+                max_bond_ = min(max_bond, q**(site_ind+1), q**(L-site_ind-1))
                 # print('r2l', self.ket.bond_size(site_ind, site_ind + 1), max_bond_)
-                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
+
+                bond_sizes = [ket.bond_size(site_ind, site_ind + 1) for k, ket in self.kets.items()]
+                print('bond sizes', bond_sizes, max_bond_)
+                adapt = do_adapt and np.all([bs  < max_bond_ for bs in bond_sizes])
+                # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
 
             # adapt=True
             # adapt=False
@@ -2483,9 +2490,18 @@ class BlockTimeIntegrator:
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))  # if site_ind != L-1 else 2
+                print('grid', self.grid)
+                q = 2
+                if self.grid.layout_type == LayoutType.PARALLEL_GROUP:
+                    q = 2 ** self.grid.ndim
+                max_bond_ = min(max_bond, q ** site_ind, q ** (L - site_ind))  # if site_ind != L-1 else 2
                 # print('r2l', self.ket.bond_size(site_ind, site_ind - 1), max_bond_)
-                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+                # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+                bond_sizes = [ket.bond_size(site_ind, site_ind - 1) for k, ket in self.kets.items()]
+
+                print('bond sizes', bond_sizes, do_adapt)
+                adapt = do_adapt and np.all([bs < max_bond_ for bs in bond_sizes])
+
 
             # adapt = True
             # adapt = False

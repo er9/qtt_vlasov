@@ -344,7 +344,8 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), ap_sys.phi.max_bonds(),
+          DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
 
