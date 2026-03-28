@@ -1067,22 +1067,28 @@ class VectorPotential(PDE_system):
 
             if do_cross and do_tdvp:
                 from helper_block_tdvp_3 import block_tdvpx as block_tddmrg
+                max_bond_ = max_bond
             elif do_tdvp:
                 from helper_block_tdvp_3 import block_tdvp as block_tddmrg
+                max_bond_ = max_bond
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+                max_bond_ = max_bond * (4 if te_order == 4 else 2)
             elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
+                max_bond_ = max_bond * (4 if te_order == 4 else 2)
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
+                max_bond_ = max_bond * (4 if te_order == 4 else 2)
 
             print('all field mps', all_fields_mps)
 
             updated_field_mps, info = block_tddmrg(dt, 7, time_deriv_mpo_list, all_fields_mps,
-                                             b_vecs=explicit_part_mps, init_direction=direction,
-                                             max_bond=max_bond, te_order=te_order, cutoff=cutoff,
-                                             backward_weights=backward_weights, do_adapt=do_tdvp,
-                                             grid=self.grid_X, return_info=True, verbose_plot=self.verbose_plot)
+                                                   b_vecs=explicit_part_mps, init_direction=direction,
+                                                   max_bond=max_bond_, te_order=te_order, cutoff=cutoff,
+                                                   backward_weights=backward_weights, do_adapt=do_tdvp,
+                                                   grid=self.grid_X, return_info=True, verbose_plot=self.verbose_plot,
+                                                   )
 
         out_gtns = {}
         ref_gtn = all_fields_dict[next(iter(all_fields_dict))]

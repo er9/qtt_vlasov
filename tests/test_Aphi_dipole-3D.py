@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
@@ -139,6 +140,8 @@ compress_style = 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
+os.makedirs(fdir + subdir, exist_ok=True)
+os.makedirs(sdir + subdir, exist_ok=True)
 
 te_compress_A = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
@@ -336,11 +339,15 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), ap_sys.phi.max_bonds(),
+          DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
         ap_sys.compute_E(compress_level=1)
         ap_sys.compute_B(compress_level=1)
+
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})
@@ -355,31 +362,49 @@ while nt < num_tsteps:
             plt.imshow(Ex) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ex(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Ex(z=0)_nt{nt}.png')
+                plt.close()
         if Ey is not None:
             plt.figure()
             plt.imshow(Ey) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ey(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Ey(z=0)_nt{nt}.png')
+                plt.close()
         if Ez is not None:
             plt.figure()
             plt.imshow(Ez) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ez(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Ez(z=0)_nt{nt}.png')
+                plt.close()
         if Bx is not None:
             plt.figure()
             plt.imshow(Bx) #, vmin=-1e-3, vmax=1e-3)
             plt.title('Bx(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Bx(z=0)_nt{nt}.png')
+                plt.close()
         if By is not None:
             plt.figure()
             plt.imshow(By) #, vmin=-1e-3, vmax=1e-3)
             plt.title('By(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'By(z=0)_nt{nt}.png')
+                plt.close()
         if Bz is not None:   ## ideally should be zero!
             plt.figure()
             plt.imshow(Bz)
             plt.title('Bz(z=0)')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Bz(z=0)_nt{nt}.png')
+                plt.close()
         plt.show()
 
         plt.figure()
@@ -389,8 +414,13 @@ while nt < num_tsteps:
             plt.plot(np.array(max_bond_dAdts)[:,i], label=f'dAdt {coord_sys.coords[i]}')
         plt.plot(np.array(max_bond_phis), label='phi')
         plt.legend()
-        plt.show()
+        plt.tight_layout()
 
+        if save_figs:
+            plt.savefig(fdir + 'ranks.png')
+            plt.close()
+
+        plt.show()
         plt.close()
         plt.close()
         plt.close()
@@ -399,14 +429,30 @@ while nt < num_tsteps:
 
         test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                                   ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
-                                  max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+                                  max_bond_A=max_bond_As,
+                                  max_bond_dAdt=max_bond_dAdts,
+                                  max_bond_phi=max_bond_phis)
 
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
+
+        for compID in ap_sys.E.componentIDs:
+            E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if E_data is not None:
+                np.save(fdir + subdir + f'E{compID}_y0-nt{nt}.npy', E_data)
+
+        for compID in ap_sys.B.componentIDs:
+            B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
+            if B_data is not None:
+                np.save(fdir + subdir +  f'B{compID}_y0-nt{nt}.npy', B_data)
 
 if save_data:
 
     test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                               ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
-                              max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+                              max_bond_A=max_bond_As,
+                              max_bond_dAdt=max_bond_dAdts,
+                              max_bond_phi=max_bond_phis)
 
     ap_sys.compute_E(compress_level=3)
     ap_sys.compute_B(compress_level=3)

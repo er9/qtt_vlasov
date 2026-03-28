@@ -353,8 +353,8 @@ while nt < num_tsteps:
           DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
-        ap_sys.compute_E(compress_level=1)
-        ap_sys.compute_B(compress_level=1)
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data()
@@ -369,11 +369,17 @@ while nt < num_tsteps:
             plt.imshow(Ez) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ez')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Ez_nt{nt}.png')
+                plt.close()
         if Bx is not None:
             plt.figure()
             plt.imshow(Bx) #, vmin=-1e-3, vmax=1e-3)
             plt.title('Bx')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + f'Bx_nt{nt}.png')
+                plt.close()
         plt.show()
 
         plt.figure()
@@ -383,6 +389,10 @@ while nt < num_tsteps:
             plt.plot(np.array(max_bond_dAdts)[:,i], label=f'dAdt {coord_sys.coords[i]}')
         plt.plot(np.array(max_bond_phis), label='phi')
         plt.legend()
+        plt.tight_layout()
+        if save_figs:
+            plt.savefig(fdir + 'ranks.png')
+            plt.close()
         plt.show()
 
         plt.close()
@@ -390,24 +400,27 @@ while nt < num_tsteps:
         plt.close()
 
     if save_data and nt%save_every_nt==0:
-        ap_sys.compute_E(compress_level=1)
-        ap_sys.compute_B(compress_level=1)
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
         ap_sys.E.save_data(sdir + subdir + f'E-nt{nt}')
         ap_sys.B.save_data(sdir + subdir + f'B-nt{nt}')
 
         for compID in ap_sys.E.componentIDs:
             E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
             if E_data is not None:
-                np.save(fdir + subdir + f'E{compID}_y0.npy', E_data)
+                np.save(fdir + subdir + f'E{compID}_y0-nt{nt}.npy', E_data)
 
         for compID in ap_sys.B.componentIDs:
             B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
             if B_data is not None:
-                np.save(fdir + subdir + f'B{compID}_y0.npy', B_data)
+                np.save(fdir + subdir + f'B{compID}_y0-nt{nt}.npy', B_data)
 
-        test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
+        test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', 
+                                  add_fstr=f'-nt{nt}',
                                   ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
-                                  max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+                                  max_bond_A=max_bond_As, 
+                                  max_bond_dAdt=max_bond_dAdts, 
+                                  max_bond_phi=max_bond_phis)
 
 
 if save_data:

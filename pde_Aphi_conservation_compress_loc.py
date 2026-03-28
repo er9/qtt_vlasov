@@ -992,7 +992,7 @@ def compress_conservative(coord_sys:CartesianCoordinateSpace,
                 # lb = np.abs(x0) * -10
                 # ub = np.abs(x0) * 10
                 # print('lb', lb, 'ub', ub)
-                result = scipy.optimize.least_squares(tot_cost, x0, bounds=(lb, ub),
+                result = scipy.optimize.least_squares(tot_cost, x0, # bounds=(lb, ub),
                                                       jac=tot_jac,
                                                       )
                 # print('opt result', result.x, 'tot cost', tot_cost(result.x))

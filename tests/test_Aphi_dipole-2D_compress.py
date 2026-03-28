@@ -44,23 +44,18 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    if run == 1:       # Lx = 40 * lam
-        dnum = 250423
-        # dnum = 250517
-    elif run == 2:     # Lx = 10 * lam
-        dnum = 250505
-        # dnum = 250518  # 250505
+    dnum = f'260225_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
         fnum = f'{dnum}/eta{dissipation}_c{comp_style}_m{deriv_order}/'
 
     if do_full:
-        sdir = f'{save_dir}/data{fnum}/EM_jz2D_full/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz2D_full/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz2D_full/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz2D_full/'
     else:
-        sdir = f'{save_dir}/data{fnum}/EM_jz2D/'
-        fdir = f'{main_dir}/data{fnum}/EM_jz2D/'
+        sdir = f'{save_dir}/data{fnum}/APhi_jz2D/'
+        fdir = f'{main_dir}/data{fnum}/APhi_jz2D/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
@@ -262,6 +257,19 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_E_ts = [0]
     nrg_B_ts = [0]
 
+    init_Ax_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_Ay_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_Az_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAy_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_dAz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+    init_phi_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_p, ax_y: deriv_p})
+
+    init_A_field = Field('A', grid_xyz, data={X: init_Ax_gtn, Y: init_Ay_gtn, Z: init_Az_gtn},
+                         compress_config=te_compress_A, is_sqrt=True)
+    init_dA_field = Field('dAdt', grid_xyz, data={X: init_dAx_gtn, Y:init_dAy_gtn, Z: init_dAz_gtn},
+                         compress_config=te_compress_dAdt, is_sqrt=True)
+    init_phi_field = ScalarField('phi', grid_xyz, data=init_phi_gtn, compress_config=te_compress_phi, is_sqrt=True)
 
 
 ### BUILD MAXWELL EQNS SOLVER
@@ -327,18 +335,20 @@ while nt < num_tsteps:
         max_bond_phis += [phi_bonds]
 
     print('ap sys dt', ap_sys.dt, dt)
-    ap_sys.compute_E(compress_level=3)
-    ap_sys.compute_B(compress_level=3)
+    # ap_sys.compute_E(compress_level=3)
+    # ap_sys.compute_B(compress_level=3)
     # nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
     # nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
 
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
-    print('max bonds', ap_sys.A.max_bonds())
+    print('result norm', nt, ts[-1], ap_sys.A.max_bonds(), ap_sys.dAdt.max_bonds(), ap_sys.phi.max_bonds(),
+          DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
+        ap_sys.compute_E(compress_level=3)
+        ap_sys.compute_B(compress_level=3)
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data()
@@ -374,7 +384,9 @@ while nt < num_tsteps:
         plt.close()
 
     ### conservative compression test
-    if nt%save_every_nt==0:
+    if True: # nt%save_every_nt==0:
+        ap_sys.compute_E(compress_level=1)
+        ap_sys.compute_B(compress_level=1)
 
         print('(1) E nrg', ap_sys.global_E_nrg())
         print('(1) B nrg', ap_sys.global_B_nrg())
@@ -387,13 +399,13 @@ while nt < num_tsteps:
 
         print('A max bond', ap_sys.A.max_bonds())
         print('dAdt max bond', dAdt.max_bonds())
-        pdb.set_trace()
+        # pdb.set_trace()
 
         # compress_conservative(coord_sys,
         #                       ap_sys.A, dAdt, ap_sys.phi,
         #                       rank=None, cutoff=1.0e-6,
         #                       num_opt=4, direction=1)
-        compress_conservative_loc(coord_sys, 2,
+        compress_conservative_loc(coord_sys, 1,
                                   ap_sys.A, dAdt, ap_sys.phi,
                                   # rank=20,
                                   cutoff=1.0e-6,
@@ -414,9 +426,9 @@ while nt < num_tsteps:
         print('compress A bonds', ap_sys.A.max_bonds())
         print('compress dAdt max bond', ap_sys.dAdt.max_bonds())
         print('compress bonds', ap_sys.E.max_bonds(), ap_sys.B.max_bonds(), DMAX, q ** L)
-        pdb.set_trace()
-
-        ap_sys.dAdt = None
+        # pdb.set_trace()
+        #
+        # # ap_sys.dAdt = None
 
 if save_data:
 
