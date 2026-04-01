@@ -46,8 +46,9 @@ if restart or save_data or save_figs:
         dnum = 250423
         # dnum = 250517
     elif run == 2:     # Lx = 10 * lam
-        dnum = 250505
+        # dnum = 250505
         # dnum = 250518  # 250505
+        dnum =  f'260331_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -121,8 +122,10 @@ upwind = flags.get('do_upwind', False)
 print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
-dt = None  # 0.05  # 0.04  # None
-cfl = flags.get('cfl', 0.9)
+dt = flags.get('dt', None)  # None  # 0.05  # 0.04  # None
+use_cfl = (dt is None)
+if use_cfl:
+    cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 1 if upwind else 31)
 
@@ -190,11 +193,13 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
 ## define time step
 dx, dy, = ax_x.dx, ax_y.dx,
-cfl_params = ((dx, dy), (c, c))
-dt_cfl = cfl_limit( cfl_params )
-dt = dt_cfl * cfl if dt is None else dt
+if use_cfl:
+    cfl_params = ((dx, dy), (c, c))
+    dt_cfl = cfl_limit( cfl_params )
+    dt = dt_cfl * cfl if dt is None else dt
+    print('dt', dt, cfl * 1. / (c / ax_x.dx + c / ax_y.dx) )
 num_tsteps = int(round(T/dt))
-print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx), num_tsteps, )
+print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
 
@@ -233,15 +238,15 @@ data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER) # , offset=1)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER) #, offset=1)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER) # , offset=1)
+# deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER) #, offset=1)
 
-# deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 
 init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
 init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
@@ -262,6 +267,7 @@ init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init
 #                                    load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 #
 # (init_E_field, init_B_field, _, _, ts, nrg_E_ts, nrg_B_ts, max_bond_Es,
+#  max_bond_Bs, _, _,) = out
 #  max_bond_Bs, _, _,) = out
 #
 # nt = len(ts) - 1

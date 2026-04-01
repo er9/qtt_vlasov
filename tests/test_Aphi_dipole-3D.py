@@ -22,7 +22,7 @@ from pde_Aphi import VectorPotential
 dipole radiation from current source (2D)
 """
 
-save_figs = True  # False
+save_figs = False
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -212,6 +212,22 @@ else:
                                             ax_z: ax_z.get_select_elems_mps(inds=[ax_z.npts//2 + i for i in range(2**max(0,L-7))]),
                                             })
 
+# width = 2 ** (L - 8)
+# J_prof = np.zeros(npts)
+# J_prof[npts // 2 - width : npts // 2 + 1] = np.linspace(0,1, width + 1, endpoint=True)
+# J_prof[npts // 2 : npts // 2 + width + 1] = np.linspace(1,0, width + 1, endpoint=True)
+# plt.figure()
+# plt.plot(J_prof)
+# plt.plot([ax_z.npts // 2 - width, ax_z.npts // 2 - width], [1, -1])
+# plt.plot([ax_z.npts // 2 + width, ax_z.npts // 2 + width], [1, -1])
+# plt.show()
+#
+# delta_fct_gtn = grid_xyz.make_mps_ndim(
+#     {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts // 2 + i for i in range(-width, width)]),
+#      ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts // 2 + i for i in range(-width, width)]),
+#      ax_z: ax_z.map_state_to_mps(J_prof)
+#      })
+
 ## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
     jz = delta_fct_gtn.scalar_multiply(np.sin(omega * t) * I0, inplace=False)
@@ -266,6 +282,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     max_bond_phis = [0]
     nrg_E_ts = [0]
     nrg_B_ts = [0]
+    tot_nrgs = [0]
 
 
 
@@ -331,10 +348,13 @@ while nt < num_tsteps:
         max_bond_phis += [phi_bonds]
 
     # print('ap sys dt', ap_sys.dt, dt)
-    # ap_sys.compute_E(compress_level=1)
-    # ap_sys.compute_B(compress_level=1)
+    ap_sys.compute_E(compress_level=3)
+    ap_sys.compute_B(compress_level=3)
     # nrg_E_ts += [ap_sys.electric_energy_density(compress_level=1)]
     # nrg_B_ts += [ap_sys.magnetic_energy_density(compress_level=1)]
+    nrg_E_ts += [ap_sys.global_E_nrg()]
+    nrg_B_ts += [ap_sys.global_B_nrg()]
+    tot_nrgs += [(np.sum([*nrg_E_ts[-1].values()]) + np.sum([*nrg_B_ts[-1].values()])) * dx * dy * dz]
 
     ts += [ts[-1] + dt_]
 
@@ -343,11 +363,16 @@ while nt < num_tsteps:
           DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
-        ap_sys.compute_E(compress_level=1)
-        ap_sys.compute_B(compress_level=1)
+        # ap_sys.compute_E(compress_level=1)
+        # ap_sys.compute_B(compress_level=1)
+        #
+        # ap_sys.compute_E(compress_level=3)
+        # ap_sys.compute_B(compress_level=3)
 
-        ap_sys.compute_E(compress_level=3)
-        ap_sys.compute_B(compress_level=3)
+        plt.figure()
+        plt.plot(ts, tot_nrgs)
+        plt.title('tot nrg')
+        plt.show()
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})

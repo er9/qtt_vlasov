@@ -1096,8 +1096,7 @@ class VectorPotential(PDE_system):
             out_gtns[k] = self.grid_X.dmrg_to_gtn_format(ref_gtn.copy(), out_mps, is_mps=True)
         new_F1 = out_gtns
 
-        # reset fields
-        # reset fields
+        # reset fields A and dAdt
         for i in range(3):
             compID = new_sys.coords_x.type_coords[i]
 

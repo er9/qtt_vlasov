@@ -43,14 +43,16 @@ if restart or save_data or save_figs:
 
     te_order = flags.get('te_order_EM', 31)
 
-    fnum = f'250403/eta{dissipation}/'
-    fnum = f'250727/eta{dissipation}/'
-    fnum = f'250806/eta{dissipation}/'  ## 555, 331 exclude
+    dnum =  f'260331_run2'
+    fnum = f'{dnum}/eta{dissipation}/'
 
-    if te_order in [31, 1]:
-        fnum = f'250809/eta{dissipation}/'  ## 31, 1 exclude
-    else:
-        fnum = f'250810/eta{dissipation}/'  ## 555, 331 include
+    # fnum = f'250727/eta{dissipation}/'
+    # fnum = f'250806/eta{dissipation}/'  ## 555, 331 exclude
+    #
+    # if te_order in [31, 1]:
+    #     fnum = f'250809/eta{dissipation}/'  ## 31, 1 exclude
+    # else:
+    #     fnum = f'250810/eta{dissipation}/'  ## 555, 331 include
 
     sdir = f'{save_dir}/data{fnum}/EM_jz3D/'
     fdir = f'{main_dir}/data{fnum}/EM_jz3D/'

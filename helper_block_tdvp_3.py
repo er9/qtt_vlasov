@@ -384,7 +384,6 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         # old_sites = {}
         x_ind = None
         for ii, ket in self.states_dict.items():
-            print('state ii', ii)
             try:
                 # old_sites[ii] = ket[i].copy()
 

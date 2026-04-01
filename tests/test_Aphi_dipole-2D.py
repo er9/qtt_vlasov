@@ -19,6 +19,17 @@ from pde_Aphi import VectorPotential
 
 """
 dipole radiation from current source (2D)
+theoretical dissipated power:
+P_loss = 1/4/a * sqrt(mu * f / pi / sig) int_L |I(z')|^2 dz'
+    a = radius of wire
+    sig = conductivity (infinite?)
+    mu = permeability
+    f = frequency = 2 np.pi omega 
+P_loss = 1/4 * sqrt(mu * f / pi / sig) int_L |J(z')|^2 dz'   where J =  I / (2 pi a^2)
+    
+https://phys.libretexts.org/Bookshelves/Electricity_and_Magnetism/Electromagnetics_II_(Ellingson)/10%3A_Antennas/10.03%3A_Power_Dissipated_by_an_Electrically-Short_Dipole
+
+--> energy in the fields = int_t P_loss(t) dt  
 """
 
 save_figs = True
