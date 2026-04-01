@@ -43,7 +43,7 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    dnum = f'260326_run{run}'
+    dnum = f'260331_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -388,7 +388,7 @@ while nt < num_tsteps:
             plt.title('Ex(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Ex(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Ex(z=0)_nt{nt}.png')
                 plt.close()
         if Ey is not None:
             plt.figure()
@@ -396,7 +396,7 @@ while nt < num_tsteps:
             plt.title('Ey(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Ey(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Ey(z=0)_nt{nt}.png')
                 plt.close()
         if Ez is not None:
             plt.figure()
@@ -404,7 +404,7 @@ while nt < num_tsteps:
             plt.title('Ez(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Ez(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Ez(z=0)_nt{nt}.png')
                 plt.close()
         if Bx is not None:
             plt.figure()
@@ -412,7 +412,7 @@ while nt < num_tsteps:
             plt.title('Bx(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Bx(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Bx(z=0)_nt{nt}.png')
                 plt.close()
         if By is not None:
             plt.figure()
@@ -420,7 +420,7 @@ while nt < num_tsteps:
             plt.title('By(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'By(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'By(z=0)_nt{nt}.png')
                 plt.close()
         if Bz is not None:   ## ideally should be zero!
             plt.figure()
@@ -428,7 +428,7 @@ while nt < num_tsteps:
             plt.title('Bz(z=0)')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Bz(z=0)_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Bz(z=0)_nt{nt}.png')
                 plt.close()
         plt.show()
 
@@ -442,7 +442,7 @@ while nt < num_tsteps:
         plt.tight_layout()
 
         if save_figs:
-            plt.savefig(fdir + 'ranks.png')
+            plt.savefig(fdir + subdir + 'ranks.png')
             plt.close()
 
         plt.show()
@@ -466,10 +466,18 @@ while nt < num_tsteps:
             if E_data is not None:
                 np.save(fdir + subdir + f'E{compID}_y0-nt{nt}.npy', E_data)
 
+            E_data = ap_sys.E[compID].get_data(ax_select={ax_z: ax_z.npts // 2})
+            if E_data is not None:
+                np.save(fdir + subdir + f'E{compID}_z0-nt{nt}.npy', E_data)
+
         for compID in ap_sys.B.componentIDs:
             B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
             if B_data is not None:
                 np.save(fdir + subdir +  f'B{compID}_y0-nt{nt}.npy', B_data)
+
+            B_data = ap_sys.B[compID].get_data(ax_select={ax_z: ax_z.npts // 2})
+            if B_data is not None:
+                np.save(fdir + subdir +  f'B{compID}_z0-nt{nt}.npy', B_data)
 
 if save_data:
 
@@ -486,11 +494,17 @@ if save_data:
         E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
         if E_data is not None:
             np.save(fdir + subdir + f'E{compID}_y0.npy', E_data)
+        E_data = ap_sys.E[compID].get_data(ax_select={ax_z: ax_z.npts // 2})
+        if E_data is not None:
+            np.save(fdir + subdir + f'E{compID}_z0.npy', E_data)
 
     for compID in ap_sys.B.componentIDs:
         B_data = ap_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts // 2})
         if B_data is not None:
             np.save(fdir + subdir +  f'B{compID}_y0.npy', B_data)
+        B_data = ap_sys.B[compID].get_data(ax_select={ax_z: ax_z.npts // 2})
+        if B_data is not None:
+            np.save(fdir + subdir +  f'B{compID}_z0.npy', B_data)
 
 
     print('saved data')
