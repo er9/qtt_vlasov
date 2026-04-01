@@ -2427,7 +2427,8 @@ class BlockTimeIntegrator:
 
                 bond_sizes = [ket.bond_size(site_ind, site_ind + 1) for k, ket in self.kets.items()]
                 print('bond sizes', bond_sizes, max_bond_)
-                adapt = do_adapt and np.all([bs  < max_bond_ for bs in bond_sizes])
+                # adapt = do_adapt and np.all([bs  < max_bond_ for bs in bond_sizes])
+                adapt = do_adapt and np.any([bs  < max_bond_ for bs in bond_sizes])
                 # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
 
             # adapt=True
@@ -2500,7 +2501,8 @@ class BlockTimeIntegrator:
                 bond_sizes = [ket.bond_size(site_ind, site_ind - 1) for k, ket in self.kets.items()]
 
                 print('bond sizes', bond_sizes, do_adapt)
-                adapt = do_adapt and np.all([bs < max_bond_ for bs in bond_sizes])
+                # adapt = do_adapt and np.all([bs < max_bond_ for bs in bond_sizes])
+                adapt = do_adapt and np.any([bs < max_bond_ for bs in bond_sizes])
 
 
             # adapt = True

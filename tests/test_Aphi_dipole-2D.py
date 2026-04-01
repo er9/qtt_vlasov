@@ -42,7 +42,11 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    dnum = f'260326_run{run}'
+    te_order = flags.get('te_order_EM', 31)
+    if te_order == 31:
+        dnum = f'260326_run{run}'
+    else:
+        dnum = f'260331_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -116,14 +120,19 @@ upwind = flags.get('do_upwind', False)
 print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
-dt = None  # 0.05  # 0.04  # None
-cfl = flags.get('cfl', 0.9)
+dt = flags.get('dt', None)  # L=8 --> dt = 0.0176 --> try dt = 0.015
+use_cfl = (dt is None)
+if use_cfl:
+    cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 31)
 
 ## restart from an saved state
 load_nt = restart_from_nt
-subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+if use_cfl:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+else:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_dt{dt}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}_dt{dt}/')
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 100)
 
@@ -183,11 +192,13 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
 ## define time step
 dx, dy, = ax_x.dx, ax_y.dx,
-cfl_params = ((dx, dy), (c, c))
-dt_cfl = cfl_limit( cfl_params )
-dt = dt_cfl * cfl if dt is None else dt
+if use_cfl:
+    cfl_params = ((dx, dy), (c, c))
+    dt_cfl = cfl_limit( cfl_params )
+    dt = dt_cfl * cfl if dt is None else dt
+    print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx), )
 num_tsteps = int(round(T/dt))
-print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx), num_tsteps, )
+print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
 
@@ -370,7 +381,7 @@ while nt < num_tsteps:
             plt.title('Ez')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Ez_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Ez_nt{nt}.png')
                 plt.close()
         if Bx is not None:
             plt.figure()
@@ -378,7 +389,7 @@ while nt < num_tsteps:
             plt.title('Bx')
             plt.colorbar()
             if save_figs:
-                plt.savefig(fdir + f'Bx_nt{nt}.png')
+                plt.savefig(fdir + subdir + f'Bx_nt{nt}.png')
                 plt.close()
         plt.show()
 
@@ -391,7 +402,7 @@ while nt < num_tsteps:
         plt.legend()
         plt.tight_layout()
         if save_figs:
-            plt.savefig(fdir + 'ranks.png')
+            plt.savefig(fdir + subdir + 'ranks.png')
             plt.close()
         plt.show()
 
