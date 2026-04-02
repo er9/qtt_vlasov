@@ -570,7 +570,7 @@ class Maxwell(PDE_system):
             elif str(self.te_order)[-1] == '7':     ## backward euler
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
-                state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] in ['33', '44', '55', '66', '77']:
 
             do_cross = str(self.te_order)[:2] in ['44', '66']
@@ -2613,11 +2613,11 @@ class Maxwell(PDE_system):
                     jF = self.grid_X.build_indexed_gtn(
                         {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
                          **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}},
-                        index_order=list(range(6)))
+                        index_order=list(range(6)), max_index=6)
                 else:
                     jF = self.grid_X.build_indexed_gtn(
                         {compID.type.value: comp for compID, comp in j.components.items()},
-                        index_order=list(range(6)))
+                        index_order=list(range(6)), max_index=6)
 
             curlF_bg = None
             background_comps = {}
@@ -2638,7 +2638,7 @@ class Maxwell(PDE_system):
                 background_comps.update(back_B_comps)
 
             if len(background_comps) > 0:
-                curlF_bg = self.grid_X.build_indexed_gtn(background_comps, index_order=list(range(6)))
+                curlF_bg = self.grid_X.build_indexed_gtn(background_comps, index_order=list(range(6)), max_index=6)
 
             sourceF = jF
             if curlF_bg is not None:

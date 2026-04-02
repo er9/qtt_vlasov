@@ -3,6 +3,7 @@ import pdb
 import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
+import matplotlib
 
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
@@ -23,7 +24,7 @@ from pde_EM import Maxwell
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = (matplotlib.get_backend() in ['agg'])
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -138,7 +139,7 @@ save_every_nt = flags.get('save_every_nt', 500)
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
 DMAX = flags.get('DMAX', None if do_tt else None)
 cutoff = flags.get('cutoff', CUTOFF)
-compress_style = 3
+compress_style = 3 if te_order == 4 else 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
@@ -232,15 +233,15 @@ data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,)
+# deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
 
-# deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-# deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 
 init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg, ax_z:deriv_zg})
 init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1, ax_z:deriv_zg})
@@ -352,7 +353,8 @@ while nt < num_tsteps:
 
     if plotting and nt == num_tsteps - 1 or nt%save_every_nt==0:
 
-        dBdt[Z].save_data(sdir + subdir +f'restart/dBzdt-{nt}')
+        if save_data:
+            dBdt[Z].save_data(sdir + subdir +f'restart/dBzdt-{nt}')
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})

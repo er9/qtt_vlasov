@@ -1,6 +1,7 @@
 import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
+import matplotlib
 
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
@@ -21,7 +22,7 @@ from pde_EM import Maxwell
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = (matplotlib.get_backend() in ['agg'])
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -123,6 +124,7 @@ print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
 dt = flags.get('dt', None)  # None  # 0.05  # 0.04  # None
+print('dt', dt)
 use_cfl = (dt is None)
 if use_cfl:
     cfl = flags.get('cfl', 0.9)
@@ -131,7 +133,10 @@ te_order = flags.get('te_order_EM', 1 if upwind else 31)
 
 ## restart from an saved state
 load_nt = restart_from_nt
-subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+if use_cfl:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+else:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_dt{dt}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}_dt{dt}/')
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 100)
 
@@ -143,7 +148,7 @@ save_every_nt = flags.get('save_every_nt', 100)
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
 DMAX = flags.get('DMAX', None if do_tt else None)
 cutoff = flags.get('cutoff', CUTOFF)
-compress_style = 1
+compress_style = 3 if te_order == 4 else 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
@@ -365,7 +370,7 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
+    print('result norm', nt, dt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
     if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
 

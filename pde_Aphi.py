@@ -422,7 +422,7 @@ class VectorPotential(PDE_system):
             elif str(self.te_order)[-1] == '7':     ## backward euler
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
-                state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] in ['33', '44', '55', '66', '77']:
 
             do_cross = str(self.te_order)[:2] in ['44', '66']
@@ -657,7 +657,7 @@ class VectorPotential(PDE_system):
                          if comp is not None and comp.data is not None}
         dAdt_fields_dict = {compID.type.value + 3: comp.copy() for compID, comp in self.dAdt.components.items()
                             if comp is not None and comp.data is not None}
-        phi_fields_dict = {7: self.phi.component.copy()}   # if self.phi.component.data is not None
+        phi_fields_dict = {6: self.phi.component.copy()}   # if self.phi.component.data is not None
         all_fields_dict = {**A_fields_dict, **dAdt_fields_dict, **phi_fields_dict}
         return all_fields_dict
 
@@ -688,7 +688,7 @@ class VectorPotential(PDE_system):
             print('ax', ax)
             if ax is not None:
                 ddx_mpo = self.grid_X.get_firstderivative_mpo(ax, deriv_config=phi_ax_deriv_configs[ax])
-                all_mpos[(7, it)] = ddx_mpo.scalar_multiply(-c2)
+                all_mpos[(6, it)] = ddx_mpo.scalar_multiply(-c2)
 
         return all_mpos
 
@@ -716,6 +716,175 @@ class VectorPotential(PDE_system):
 
         return num_fields
 
+    def get_combined_state(self) -> 'GridTN':
+        """ get Ex, Ey, Ez; Bx, By, Bz as a single MPS
+            excludes fields that are None / 0
+        """
+        index_order = np.arange(7)
+        all_mps = self.get_state_dict()
+        tot_state = self.grid_X.build_indexed_gtn(all_mps, index_order=index_order)
+        return tot_state
+
+    def crank_nicolson(self, dt, time: float = None, use_A2=True, inplace=False,
+                       err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
+                       compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+        """
+        d/dt A = dA/dt
+        d/dt dA/dt = c^2 * lapl(A) + 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        d/dt V = - c^2 div(A) [SI]
+
+        CN: (u_n+1 - u_n) / dt = 1/2( F_n+1(u) + F_n(u) )
+
+
+        | 1/dt * I    -w * I       0    | | A^(n+1) | = | 1/dt * I      (1-w) * I      0    | | A^(n) |  - |    0    |
+        |-c2 w lapl  1/dt * I      0    | |dA^(n+1) | = | c2 (1-w) lapl  1/dt * I      0    | |dA^(n) |  + |J^(n+1/2)|
+        | c2 w div      0      1/dt * I | |phi^(n+1)| = | -c2 (1-w) div      0     1/dt * I | |phi^(n)}  + |    0    |
+        where w = weight (default is 0.5)
+        """
+        # use_dmrg_new = True  # False
+        # if use_dmrg_new:
+        #     return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
+        #                                     compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
+
+        new_sys = self if inplace else self.copy()
+        use_dmrg = True
+        try_adaptive_solve = False
+
+        ## current, theoretically at time n + 1/2
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+        ### dmrg method
+        if use_dmrg:
+            print("HERE, EM USE DMRG")
+
+            num_active_fields = self.get_num_active_fields()
+            all_fields_vec = self.get_combined_state()
+            all_fields_time_deriv = self.get_combined_derivative_mpo()
+
+            compress_opts = new_sys.A.compress_config.get_compress_opts(1).copy()
+            max_bond = compress_opts.get('max_bond', None)
+            if max_bond is not None:
+                compress_opts['max_bond'] = max_bond * num_active_fields
+
+            jF = None
+            if j is not None:
+                jF = self.grid_X.build_indexed_gtn(
+                    {3 + compID.type.value: comp for compID, comp in j.components.items()},
+                    index_order=list(range(7)), max_index=7)
+
+            sourceF = jF
+
+            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs):
+
+                sourceF_dt = None
+                if sourceF is not None and sourceF.data is not None:
+                    sourceF_dt = sourceF.scalar_multiply(dt_, inplace=False)
+
+                ## explicit contribution
+                dFdt1 = fields_vec.apply(all_fields_time_deriv, compress=compress_level)  ## nans in compress
+                dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
+                if sourceF_dt is not None:
+                    F1 = fields_vec.add(dFdt1, inplace=False)
+                    F1 = F1.add(sourceF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                else:
+                    F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                # F1 = all_fields_vec.copy()
+                # print('compress opts', compress_level, compress_opts)
+                print('EM solve F1', F1.max_bond())
+
+                # ########### tmp ##############
+                # # reset fields
+                # for i in range(3):
+                #     compID = new_sys.coords_x.type_coords[i]
+                #
+                #     EC = new_sys.grid_X.select_indexed_gtn(F1, i).get_data()
+                #     BC = new_sys.grid_X.select_indexed_gtn(F1, 3 + i).get_data()
+                #
+                #     if EC is not None:
+                #         plt.figure()
+                #         plt.plot(EC)
+                #         plt.title(f'comp{i}')
+                #
+                #     if BC is not None:
+                #         plt.figure()
+                #         plt.plot(BC)
+                #         plt.title(f'comp{i + 3}')
+                # plt.show()
+                # exit()
+
+                ## implicit contribution operator
+                dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt_, inplace=False)
+                iden_gtn = dFdt_gtn.get_like_iden()
+                imp_gtn = dFdt_gtn.add(iden_gtn)
+                print('EM implicit op', imp_gtn.max_bond())
+
+                ## dmrg solve
+                print('implicit dmrg solve', compress_opts)
+                updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, use_A2=use_A2, is_H=False,
+                                                    # init_guess=fields_vec,    ## actually gives wrong answer
+                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
+                # exit()
+                if verbose_output:
+                    return updated_F1, err, is_conv
+                return updated_F1
+
+            if all_fields_vec is None and sourceF is None:
+                return new_sys
+            elif all_fields_vec is None and sourceF is not None:
+                sourceF_dt = sourceF.scalar_multiply(dt, inplace=False)
+                new_F1 = sourceF_dt
+                # print('new F1', new_F1.data)
+                # new_F1.data.site_ind_id = new_F1.data.site_ind_id + '_j_'
+            else:
+
+                if try_adaptive_solve:
+                    raise NotImplementedError
+                else:
+                    new_F1 = _implicit_solver(dt, all_fields_vec)
+
+            # reset fields
+            for i in range(3):
+                compID = new_sys.coords_x.type_coords[i]
+
+                ref_AC = new_sys.A.components.get(compID, None)
+                ax_deriv_configs = ref_AC.ax_deriv_configs if ref_AC is not None else None
+                AC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
+                AC.ax_deriv_configs = ax_deriv_configs
+                if not (AC is None and compID not in new_sys.phi.componentIDs):
+                    new_sys.A.components[compID] = AC
+                    # print('EC', compID, EC.max_bond(), EC.canon_site)
+
+                ref_dAdtC = new_sys.dAdt.components.get(compID, None)
+                ax_deriv_configs = ref_dAdtC.ax_deriv_configs if ref_dAdtC is not None else None
+                dAdtC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
+                dAdtC.ax_deriv_configs = ax_deriv_configs
+                if not (dAdtC is None and compID not in new_sys.dAdt.componentIDs):
+                    new_sys.dAdt.components[compID] = dAdtC
+                    # print('BC', compID, BC.max_bond(), BC.canon_site)
+
+                ref_phi = new_sys.phi.component
+                ax_deriv_configs = ref_phi.ax_deriv_configs if ref_phi is not None else None
+                phiC = new_sys.grid_X.select_indexed_gtn(new_F1, 6)
+                phiC.ax_deriv_configs = ax_deriv_configs
+                if phiC is not None:
+                    new_sys.phi.component = phiC
+
+
+            new_sys.A.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+            new_sys.dAdt.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+            new_sys.phi.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+
+        else:  ## solve iteratively until convergence
+
+            raise NotImplementedError
+
+        return new_sys
 
     def crank_nicolson_block(self, dt, time: float = None, use_A2=True, inplace=False, weight=0.5,
                              err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
@@ -943,7 +1112,7 @@ class VectorPotential(PDE_system):
 
         ref_phi = new_sys.phi.component
         ax_deriv_configs = ref_phi.ax_deriv_configs if ref_phi is not None else {}
-        phi = new_F1.get(7, self.grid_X.make_empty_gridTN())
+        phi = new_F1.get(6, self.grid_X.make_empty_gridTN())
         phi.ax_deriv_configs = ax_deriv_configs
         if phi is not None:
             new_sys.phi.component = phi
@@ -1117,7 +1286,7 @@ class VectorPotential(PDE_system):
 
         ref_phi = new_sys.phi.component
         ax_deriv_configs = ref_phi.ax_deriv_configs if ref_phi is not None else {}
-        phi = new_F1.get(7, self.grid_X.make_empty_gridTN())
+        phi = new_F1.get(6, self.grid_X.make_empty_gridTN())
         phi.ax_deriv_configs = ax_deriv_configs
         if phi is not None:
             new_sys.phi.component = phi
@@ -1139,7 +1308,7 @@ class VectorPotential(PDE_system):
 
         phi = new_sys.phi
         if phi is not None:
-            phi.component.info['num_evals'] = info['num_evals'].get(7, 0) if info is not None else 0
+            phi.component.info['num_evals'] = info['num_evals'].get(6, 0) if info is not None else 0
             phi.component.info['internal_rank'] = phi.max_bond()
             print('phi internal rank', phi.max_bond())
 

@@ -115,7 +115,8 @@ class GridTN1D(GridTN):
 
     @property
     def L(self):
-        return self.data.L
+        return self.grid.L
+        # return self.data.L
 
     def mangle_inner(self, inplace=True, append=None):
         out = self if inplace else self.copy()
@@ -249,9 +250,14 @@ class GridTN1D(GridTN):
             for i in range(1, L - 1):
                 iden_list += [np.array([[np.eye(phys_dims[i])]])]
             iden_list += [np.array([np.eye(phys_dims[L - 1])])]
-        else:
-            raise NotImplementedError
-        mpo = qtn.MatrixProductOperator(iden_list, shape='lrud', site_tag_id=self.data.site_tag_id)
+            mpo = qtn.MatrixProductOperator(iden_list, shape='lrud', site_tag_id=self.data.site_tag_id)
+        else:   ## L = 1
+
+            mpo = qtn.TensorNetwork([qtn.Tensor(scipy.sparse.eye(phys_dims[0]),
+                                                inds=(self.data.lower_ind(0), self.data.lower_ind(0)),
+                                                tags=(self.data.site_tag(0)))])
+            mpo.view_like(self.data, inplace=True)
+            # raise NotImplementedError
 
         return self.create_like(mpo)
 
@@ -578,6 +584,30 @@ class GridTN1D(GridTN):
 
         if operator is None:
             return self if inplace else self.copy()
+
+        if self.L == 1:
+            operator.data.distribute_exponent()
+            self.data.distribute_exponent()
+            Amat = operator.data[0]
+            bvec = self.data[0]
+
+            # xvec = scipy.sparse.linalg.spsolve(Amat.data, bvec.data)
+            # err = np.linalg.norm(Amat.data @ xvec - bvec.data)
+            # is_conv = True
+
+            xvec, info = scipy.sparse.linalg.cgs(Amat.data, bvec.data, tol=1.0e-10)
+            err = np.linalg.norm(Amat.data @ xvec - bvec.data)
+            is_conv = (info == 0)
+
+            xvec_tn = qtn.TensorNetwork([qtn.Tensor(xvec, inds=bvec.inds, tags=bvec.tags)])
+            xvec_tn.view_like(self.data, inplace=True)
+            xvec_gtn = self.create_like(xvec_tn)
+            if verbose_output:
+
+                print('scipy solve err', err)
+                return xvec_gtn, err, is_conv
+            return xvec_gtn
+
 
         grid_mpx1 = self if inplace else self.copy()
         grid_mpx1.is_constant *= operator.is_constant

@@ -1,7 +1,6 @@
-import matplotlib.pyplot as plt
-import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
+import matplotlib
 
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
@@ -22,7 +21,7 @@ from pde_Aphi import VectorPotential
 dipole radiation from current source (2D)
 """
 
-save_figs = False
+save_figs = (matplotlib.get_backend() in ['agg'])
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
 load_data = bool(flags.get('load_data', True))
@@ -136,7 +135,7 @@ save_every_nt = flags.get('save_every_nt', 100)
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
 DMAX = flags.get('DMAX', None if do_tt else None)
 cutoff = flags.get('cutoff', CUTOFF)
-compress_style = 1
+compress_style = 3 if te_order == 4 else 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'

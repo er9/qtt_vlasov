@@ -449,8 +449,12 @@ class Field:
             else:
                 comp_distances[compID] = comp1.distance(comp2)
                 if normalize:
-                    norm_val = comp1.frobenius_norm() if comp_norms is None else comp_norms[compID]
-                    comp_distances[compID] /= norm_val
+                    norm_val = comp1.frobenius_norm() if comp_norms is None else comp_norms.get(compID, 0)
+                    if norm_val == 0:
+                        if comp_distances[compID] != 0.0:
+                            comp_distances[compID] = np.inf
+                    else:
+                        comp_distances[compID] /= norm_val
 
         return comp_distances
 

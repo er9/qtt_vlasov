@@ -1,3 +1,4 @@
+import scipy.sparse
 from scipy import linalg as spla
 
 import axis
@@ -545,10 +546,17 @@ class Grid1D(Grid):
             out_gtn = ref_gtn.create_like(new_data=solver.ket.view_as(qtn.MatrixProductState))
             return out_gtn
 
-    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None) -> 'GridTN':
+    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None, max_index=None) -> 'GridTN':
         """ builds a gtn from provided gtns in dict_gtns
             adds tensor that indexes each gtn as specified by the key
         """
+        if len(dict_gtns) == 0:
+            return None
+
+        gtn = dict_gtns[next(iter(dict_gtns))]
+        if gtn.L == 1:
+            return self.build_indexed_gtn_sparse(dict_gtns, index_order, max_index=max_index)
+
         if index_order is None:
             index_order = dict_gtns.keys()
 
@@ -619,6 +627,10 @@ class Grid1D(Grid):
         """ selects a subgtn from gtn
         """
         L = gtn.data.L
+
+        if gtn.L == 1:
+            return self.select_indexed_gtn_sparse(gtn, select_ind)
+
         gtn = gtn.copy()
         index_tensor = gtn.get_anchor_tens()
         index_ind = gtn.get_anchor_ind()
@@ -651,6 +663,92 @@ class Grid1D(Grid):
 
         sub_gtn = gtn.create_like(sub_gtn_data)
         return sub_gtn
+
+    def build_indexed_gtn_sparse(self, dict_gtns: dict[any, 'GridTN'], index_order=None, max_index=None) -> 'GridTN':
+        """ builds a gtn from provided gtns in dict_gtns
+            adds tensor that indexes each gtn as specified by the key
+        """
+        if index_order is None:
+            index_order = dict_gtns.keys()
+
+        # num_inds = len(index_order)
+        # num_items = len(dict_gtns.keys())
+        # print('num inds', num_inds, num_items)
+        # ind_tens = np.zeros((num_inds, num_inds))
+
+        ref_key = next(iter(dict_gtns.keys()))
+        ref_gtn = dict_gtns[ref_key]
+        ndim = (1 if isinstance(ref_key, int) else len(ref_key))
+        if ndim == 1:
+            if max_index is not None:
+                shapes = [max_index]
+            else:
+                shapes = [np.max([k for k in dict_gtns.keys()]) + 1 for i in range(ndim)]
+        else:
+            if max_index is not None:
+                shapes = [max_index, max_index]
+            else:
+                shapes = [np.max([k[i] for k in dict_gtns.keys()]) + 1 for i in range(ndim)]
+        block_array = np.empty(shapes, dtype=object)
+        for it in np.ndindex(*shapes):
+            if ndim == 1:
+                block_array[it] = np.zeros(ref_gtn.data[0].data.shape)
+            else:
+                block_array[it] = scipy.sparse.coo_array(ref_gtn.data[0].data.shape)
+
+
+        # print('dict gtn', dict_gtns)
+
+        ref_inds, ref_tags = None, None
+        for ind, gtn in dict_gtns.items():
+            assert(gtn.L == 1), 'gtn length must be 1'
+            # assert(scipy.sparse.issparse(gtn.data[0].data)), 'gtn data must be sparse'
+            tens0 = gtn.data[0]
+            if ref_inds is None:
+                ref_inds = tens0.inds
+            else:
+                if tens0.inds != ref_inds:
+                    gtn.modify(data=scipy.sparse.swapaxes(tens0.data), inds=ref_inds)
+                # print('gtn data', gtn.data[0])
+                # print('ref inds', ref_inds)
+
+            if ref_tags is None:
+                ref_tags = gtn.data[0].tags
+
+            gtn.data.distribute_exponent()
+            block_array[ind] = gtn.data[0].data
+
+        if ndim == 2:
+            new_data = scipy.sparse.block_array(block_array)
+        elif ndim == 1:
+            new_data = np.hstack(block_array)
+        else:
+            raise ValueError
+        new_tn = qtn.TensorNetwork( [qtn.Tensor(data=new_data, inds=ref_inds, tags=ref_tags)] )
+        new_tn.view_like(gtn.data, inplace=True)
+        new_gtn = gtn.grid.make_gridTN(new_tn)
+        return new_gtn
+
+    def select_indexed_gtn_sparse(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
+        """ selects a subgtn from gtn
+        """
+        grid = gtn.grid
+        assert(gtn.L == 1)
+        # assert(scipy.sparse.issparse(gtn[0].data))
+        npts = np.prod([ax.q for ax in grid.axes])
+
+        ind1 = npts * select_ind
+        sel_data = gtn.data[0].data[ind1: ind1 + npts]
+        sel_mpx = qtn.TensorNetwork([qtn.Tensor(sel_data, inds=gtn.data[0].inds, tags=gtn.data[0].tags)])
+        sel_mpx.view_like(gtn.data, inplace=True)
+        sel_mpx.exponent = gtn.data.exponent
+
+        if helper.norm(sel_mpx) < np.sqrt(CUTOFF):
+            sub_gtn_data = None
+
+        sub_gtn = gtn.create_like(sel_mpx)
+        return sub_gtn
+
 
     ####################
     ### dmrg methods ###

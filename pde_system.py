@@ -343,7 +343,9 @@ class PDE_system:
         if total:
             tot_diff = 0.0
             for k in all_fields:
-                diff_vals = np.array([val for compID, val in fields_distance[k].items()])
+                field_dist = fields_distance.get(k, None)
+                if field_dist is not None:
+                    diff_vals = np.array([val for compID, val in field_dist.items()])
                 tot_diff += np.sum( diff_vals**2 )
             return np.sqrt(tot_diff)
         else:
@@ -1650,7 +1652,8 @@ class PDE_system:
         time1 = time + dt if time is not None else None
 
         prev_state = self
-        fields_norm = {k: field.norms() for k, field in self._fields.items()}
+        fields_norm = {k: field.norms() for k, field in self._fields.items()
+                       if field is not None}
         deriv0 = self.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
                                                 compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
         # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
