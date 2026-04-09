@@ -3699,21 +3699,29 @@ class Maxwell(PDE_system):
 
             if do_cross and do_tdvp:
                 from helper_block_tdvp_3 import block_tdvpx as block_tddmrg
+                max_bond_ = max_bond
             elif do_tdvp:
                 from helper_block_tdvp_3 import block_tdvp as block_tddmrg
+                max_bond_ = max_bond
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+                # max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
+                max_bond_ = None
             elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
+                # max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
+                max_bond_ = None
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
+                # max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
+                max_bond_ = None
 
             print('all field mps', all_fields_mps)
 
             updated_field_mps, info = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
                                              b_vecs=explicit_part_mps, masks=mask_dict, init_direction=direction,
                                              # constraints=constraints, constraint_vals=constraint_vals,
-                                             max_bond=max_bond, te_order=te_order, cutoff=cutoff,
+                                             max_bond=max_bond_, te_order=te_order, cutoff=cutoff,
                                              backward_weights=backward_weights, do_adapt=do_tdvp,
                                              grid=self.grid_X, return_info=True, verbose_plot=self.verbose_plot)
 

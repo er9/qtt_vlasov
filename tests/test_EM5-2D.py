@@ -25,7 +25,7 @@ dipole radiation from current source (2D)
 save_figs = (matplotlib.get_backend() in ['agg'])
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
-load_data = bool(flags.get('load_data', True))
+load_data = False  # bool(flags.get('load_data', True))
 restart_from_T = flags.get('load_data', None)
 restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
 ## to restart from a specfic restart file
@@ -43,13 +43,13 @@ run = flags.get('branch', 1)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    if run == 1:       # Lx = 40 * lam
-        dnum = 250423
-        # dnum = 250517
-    elif run == 2:     # Lx = 10 * lam
-        # dnum = 250505
-        # dnum = 250518  # 250505
-        dnum =  f'260331_run{run}'
+    # if run == 1:       # Lx = 40 * lam
+    #     dnum = 250423
+    #     # dnum = 250517
+    # elif run == 2:     # Lx = 10 * lam
+    #     # dnum = 250505
+    #     # dnum = 250518  # 250505
+    dnum =  f'260331_run{run}'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -415,7 +415,7 @@ while nt < num_tsteps:
 
 if save_data:
 
-    test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, add_fstr=f'-nt{nt}',
+    test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, # add_fstr=f'-nt{nt}',
                                  ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
                                  max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs)
 

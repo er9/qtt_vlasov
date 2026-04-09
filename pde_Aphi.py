@@ -1242,13 +1242,13 @@ class VectorPotential(PDE_system):
                 max_bond_ = max_bond
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
-                max_bond_ = max_bond * (4 if te_order == 4 else 2)
+                max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
             elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
-                max_bond_ = max_bond * (4 if te_order == 4 else 2)
+                max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
-                max_bond_ = max_bond * (4 if te_order == 4 else 2)
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
 
             print('all field mps', all_fields_mps)
 
@@ -1314,7 +1314,7 @@ class VectorPotential(PDE_system):
 
 
         new_sys.A.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
-        new_sys.dAdt.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
+        new_sys.dAdt.compress(inplace=True, compress_level=1) # norm_cutoff=np.sqrt(cutoff))
         new_sys.phi.compress(inplace=True, compress_level=1)
 
         # print('new sys A', new_sys.A)
