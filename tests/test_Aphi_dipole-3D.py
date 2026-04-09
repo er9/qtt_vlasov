@@ -24,7 +24,7 @@ dipole radiation from current source (2D)
 save_figs = (matplotlib.get_backend() in ['agg'])
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
-load_data = bool(flags.get('load_data', True))
+load_data = False  # bool(flags.get('load_data', True))
 restart_from_T = flags.get('load_data', None)
 restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
 ## to restart from a specfic restart file
@@ -42,7 +42,12 @@ run = flags.get('branch', 2)
 clean = False  # True
 
 if restart or save_data or save_figs:
-    dnum = f'260331_run{run}'
+    # te_order = flags.get('te_order_EM', 31)
+    # if te_order in [31, 1]:
+    #     dnum = f'260331_run{run}'
+    # else:
+    #     dnum = f'260406_run{run}_aug1'
+    dnum = f'260406_run{run}_aug1'
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -116,14 +121,20 @@ upwind = flags.get('do_upwind', False)
 print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
-dt = None  # 0.05  # 0.04  # None
-cfl = flags.get('cfl', 0.9)
+dt = flags.get('dt', None)  # None  # 0.05  # 0.04  # None
+print('dt', dt)
+use_cfl = (dt is None)
+if use_cfl:
+    cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 31)
 
 ## restart from an saved state
 load_nt = restart_from_nt
-subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+if use_cfl:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
+else:
+    subdir = (f'{layout_str}/L{L}_te{te_order}_dt{dt}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}_dt{dt}/')
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 100)
 
@@ -187,11 +198,13 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, ax_z, coords=[X,Y,Z])
 
 ## define time step
 dx, dy, dz = ax_x.dx, ax_y.dx, ax_z.dx
-cfl_params = ((dx, dy, dz), (c, c, c))
-dt_cfl = cfl_limit( cfl_params )
-dt = dt_cfl * cfl if dt is None else dt
+if use_cfl:
+    cfl_params = ((dx, dy, dz), (c, c, c))
+    dt_cfl = cfl_limit( cfl_params )
+    dt = dt_cfl * cfl if dt is None else dt
+    print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/ax_z.dx),)
 num_tsteps = int(round(T/dt))
-print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/ax_z.dx), num_tsteps, )
+print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy, 'dz', dz)
 
@@ -252,16 +265,18 @@ init_dA_field = Field('dAdt', grid_xyz, data={X: init_dAx_gtn, Y:init_dAy_gtn, Z
 init_phi_field = ScalarField('phi', grid_xyz, data=init_phi_gtn, compress_config=te_compress_phi, is_sqrt=True)
 
 
+prev_A_field, prev_phi_field = None, None
 try:
     if not restart:
         raise IOError
 
     #### load data if restarting ####
     out = test_setup.load_data_Aphi(fstr, init_A_field, init_dA_field, init_phi_field,
-                                       fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt,
-                                       load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                                    fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt,
+                                    load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_A_field, init_dA_field, init_phi_field, ts, nrg_E_ts, nrg_B_ts, max_bond_As,
+    (init_A_field, init_dA_field, init_phi_field, prev_A_field, prev_phi_field,
+     ts, nrg_E_ts, nrg_B_ts, max_bond_As,
      max_bond_dAdts, max_bond_phis,) = out
 
     nt = len(ts) - 1
@@ -270,6 +285,16 @@ try:
     init_A_field.compress(compress_opts={'cutoff': cutoff})
     init_dA_field.compress(compress_opts={'cutoff': cutoff})
     init_phi_field.compress(compress_opts={'cutoff': cutoff})
+
+    if prev_A_field.num_active == 0:
+        prev_A_field = None
+        if te_order == 31:
+            raise IOError
+    if prev_phi_field.num_active == 0:
+        prev_phi_field = None
+
+
+    tot_nrgs = [0]
 
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
@@ -289,6 +314,12 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 ap_sys = VectorPotential(init_A_field, init_dA_field, init_phi_field,
                          coords_x=coord_sys, matl_params=matl_config,
                          te_order=te_order, compress_levels=comp_levels)
+if prev_A_field is not None:
+    ap_sys.A_history = [prev_A_field]
+
+if prev_phi_field is not None:
+    ap_sys.phi_history = [prev_phi_field]
+
 
 
 while nt < num_tsteps:
@@ -299,8 +330,11 @@ while nt < num_tsteps:
     ## set the current density in the EM solver
     ap_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
+    time1 = time.time()
     ap_sys = ap_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt == 0),
                                    apply_constraints=False)
+
+    print('runtime per step', time.time() - time1)
 
     pre_dissip_A_bonds = [ap_sys.A.max_bond(C) for C in [X, Y, Z]]
     pre_dissip_phi_bonds = ap_sys.phi.max_bond()
@@ -368,10 +402,10 @@ while nt < num_tsteps:
         # ap_sys.compute_E(compress_level=3)
         # ap_sys.compute_B(compress_level=3)
 
-        plt.figure()
-        plt.plot(ts, tot_nrgs)
-        plt.title('tot nrg')
-        plt.show()
+        # plt.figure()
+        # plt.plot(ts, tot_nrgs)
+        # plt.title('tot nrg')
+        # plt.show()
 
         ## Ez, Bx fields
         Ex = ap_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})
@@ -478,6 +512,10 @@ while nt < num_tsteps:
             if B_data is not None:
                 np.save(fdir + subdir +  f'B{compID}_z0-nt{nt}.npy', B_data)
 
+print('ap sys', ap_sys.A)
+print('ap sys', ap_sys.dAdt.components)
+print('ap sys', ap_sys.phi)
+
 if save_data:
 
     test_setup.save_data_Aphi(fstr, ap_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
@@ -488,6 +526,8 @@ if save_data:
 
     ap_sys.compute_E(compress_level=3)
     ap_sys.compute_B(compress_level=3)
+    ap_sys.E.save_data(fdir + subdir + 'E')
+    ap_sys.B.save_data(fdir + subdir + 'B')
 
     for compID in ap_sys.E.componentIDs:
         E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})

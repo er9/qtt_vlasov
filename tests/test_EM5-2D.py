@@ -23,9 +23,10 @@ dipole radiation from current source (2D)
 """
 
 save_figs = (matplotlib.get_backend() in ['agg'])
+print('save figs', save_figs)
 save_data = flags.get('save_data', True)
 ## to load the output file and maybe restart from it (vs a saved restart file)
-load_data = bool(flags.get('load_data', True))
+load_data = False # bool(flags.get('load_data', True))
 restart_from_T = flags.get('load_data', None)
 restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
 ## to restart from a specfic restart file
@@ -38,7 +39,7 @@ do_full = flags.get('do_full', False)
 dissipation = flags.get('dissipation', 0.0)
 deriv_order = flags.get('deriv_order', 2)
 comp_style = flags.get('comp_style', 1)
-run = flags.get('branch', 1)
+run = flags.get('branch', 2)
 
 clean = False  # True
 
@@ -49,7 +50,12 @@ if restart or save_data or save_figs:
     elif run == 2:     # Lx = 10 * lam
         # dnum = 250505
         # dnum = 250518  # 250505
-        dnum =  f'260331_run{run}'
+        # dnum =  f'260331_run{run}'
+        # dnum =  f'260406_run{run}'  # Td-DMRG CN with max_bond_ = 2*max_bond
+        dnum =  f'260406_run{run}_aug1'  
+        # TDVP CN with expand_kets=True, compression between back-forth sweeps
+        # dnum =  f'260406_run{run}_aug2'  
+        # TDVP CN with expand_kets=True, no compression between back-forth sweeps
     if dissipation == 0.:
         fnum = f'{dnum}/eta{dissipation}/'
     else:
@@ -65,6 +71,7 @@ if restart or save_data or save_figs:
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
 
+    print('fdir', fdir)
     if not os.path.exists(fdir):
         os.makedirs(fdir, exist_ok=True)
 
@@ -130,6 +137,7 @@ if use_cfl:
     cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 1 if upwind else 31)
+upwind = True if te_order == 1 else upwind
 
 ## restart from an saved state
 load_nt = restart_from_nt
@@ -139,6 +147,7 @@ else:
     subdir = (f'{layout_str}/L{L}_te{te_order}_dt{dt}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}_dt{dt}/')
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 100)
+
 
 #############################
 ## start building PDE system
@@ -152,6 +161,8 @@ compress_style = 3 if te_order == 4 else 1
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
+os.makedirs(sdir + subdir, exist_ok=True)
+os.makedirs(fdir + subdir, exist_ok=True)
 
 te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
@@ -288,7 +299,8 @@ try:
         raise IOError
 
     #### load data if restarting ####
-    out = test_setup.load_data_Maxwell(fstr, init_E_field, init_B_field, None, None,
+    out = test_setup.load_data_Maxwell(fstr, 
+                                       init_E_field, init_B_field, None, None,
                                        fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt * 10,
                                        load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
@@ -325,12 +337,15 @@ while nt < num_tsteps:
 
     dt_ = dt if nt==0 else dt
     print('dt_', dt, 't', ts[-1])
+    time1 = time.time()
 
     ## set the current density in the EM solver
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False)
+
+    print('runtime per step', time.time() - time1)
 
     pre_dissip_E_bonds = [em_sys.E.max_bond(C) for C in [X, Y, Z]]
     pre_dissip_B_bonds = [em_sys.B.max_bond(C) for C in [X, Y, Z]]
@@ -381,17 +396,22 @@ while nt < num_tsteps:
         Bx = em_sys.B[X].get_data()
         By = em_sys.B[Y].get_data()
         Bz = em_sys.B[Z].get_data()
-        plt.figure()
         if Ez is not None:
             plt.figure()
             plt.imshow(Ez) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ez')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + subdir + f'Ez_nt{nt}.png', dpi=300)
+                plt.close()
         if Bx is not None:
             plt.figure()
             plt.imshow(Bx) #, vmin=-1e-3, vmax=1e-3)
             plt.title('Bx')
             plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + subdir + f'Bx_nt{nt}.png', dpi=300)
+                plt.close()
         plt.show()
 
         plt.figure()
@@ -400,11 +420,13 @@ while nt < num_tsteps:
         for i in range(3):
             plt.plot(np.array(max_bond_Es)[:,i], label=f'E{coord_sys.coords[i]}')
         plt.legend()
-        plt.show()
 
-        plt.close()
-        plt.close()
-        plt.close()
+        if save_figs:
+            plt.savefig(fdir + subdir + 'max_rank.png', dpi=300)
+            plt.close()
+        else:
+            plt.show()
+
 
     if save_data and nt%save_every_nt==0:
 
@@ -413,9 +435,46 @@ while nt < num_tsteps:
                                      max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs)
 
 
+
+print('em sys E', em_sys.E.components)
+print('em sys B', em_sys.B.components)
+
+# if Ez is not None:
+#     plt.figure()
+#     plt.imshow(Ez) #, vmin=1e-3, vmax=1e-3)
+#     plt.title('Ez')
+#     plt.colorbar()
+#     if save_figs:
+#         plt.savefig(fdir + subdir + f'Ez_nt{nt}.png', dpi=300)
+#         plt.close()
+# if Bx is not None:
+#     plt.figure()
+#     plt.imshow(Bx) #, vmin=-1e-3, vmax=1e-3)
+#     plt.title('Bx')
+#     plt.colorbar()
+#     if save_figs:
+#         plt.savefig(fdir + subdir + f'Bx_nt{nt}.png', dpi=300)
+#         plt.close()
+# plt.show()
+# 
+# plt.figure()
+# for i in range(3):
+#     plt.plot(np.array(max_bond_Bs)[:,i], label=f'B{coord_sys.coords[i]}')
+# for i in range(3):
+#     plt.plot(np.array(max_bond_Es)[:,i], label=f'E{coord_sys.coords[i]}')
+# plt.legend()
+# 
+# if save_figs:
+#     plt.savefig(fdir + subdir + 'max_rank.png', dpi=300)
+#     plt.close()
+# else:
+#     plt.show()
+
+
+
 if save_data:
 
-    test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, add_fstr=f'-nt{nt}',
+    test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, # add_fstr=f'-nt{nt}',
                                  ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
                                  max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs)
 

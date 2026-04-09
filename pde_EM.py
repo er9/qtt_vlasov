@@ -560,7 +560,9 @@ class Maxwell(PDE_system):
             state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
         elif str(self.te_order)[:2] == '22':
             if str(self.te_order)[-1] == '1':
-                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level, solver_kwargs={'opt_nsites':2})
+            elif str(self.te_order)[-1] == '0':
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level, solver_kwargs={'adaptive_solve': False, 'opt_nsites':1})
             elif str(self.te_order)[-1] == '3':
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             elif str(self.te_order)[-1] == '4':
@@ -2561,7 +2563,9 @@ class Maxwell(PDE_system):
     # @profile
     def crank_nicolson(self, dt, time: float = None, use_A2=True, inplace=False,
                        err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
-                       compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+                       compress_level: int = 1, verbose_plot=False, 
+                       solver_kwargs=None,
+                       **deriv_kwargs):
         """
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
         ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
@@ -2581,7 +2585,10 @@ class Maxwell(PDE_system):
 
         new_sys = self if inplace else self.copy()
         use_dmrg = True
-        try_adaptive_solve = True  # False
+        if solver_kwargs is None:
+            solver_kwargs = {}
+        try_adaptive_solve = solver_kwargs.pop('adaptive_solve', True)  # False
+        print('adaptive solve', try_adaptive_solve)
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -2645,7 +2652,7 @@ class Maxwell(PDE_system):
                 sourceF = curlF_bg.add(sourceF, compress=5, inplace=False)
                 # print('sourceF norm', sourceF.frobenius_norm())
 
-            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs):
+            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs_):
 
                 sourceF_dt = None
                 if sourceF is not None and sourceF.data is not None:
@@ -2693,7 +2700,7 @@ class Maxwell(PDE_system):
                 print('implicit dmrg solve', compress_opts)
                 updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, use_A2=use_A2, is_H=False,
                                                     # init_guess=fields_vec,    ## actually gives wrong answer
-                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
+                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs_)
                 # exit()
                 if verbose_output:
                     return updated_F1, err, is_conv
@@ -2759,7 +2766,7 @@ class Maxwell(PDE_system):
                         print('nt', nt)
                         new_F1 = old_fields_vec
                         for step in range(nt):
-                            new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, )
+                            new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, **solver_kwargs)
                             if nt < max_nt and (not is_conv) and err > 1.0e-3:
                                 nt = min(nt + 1, max_nt)
                                 break
@@ -2768,7 +2775,7 @@ class Maxwell(PDE_system):
 
                     self.nt = nt
                 else:
-                    new_F1 = _implicit_solver(dt, all_fields_vec)
+                    new_F1 = _implicit_solver(dt, all_fields_vec, **solver_kwargs)
 
             # reset fields
             for i in range(3):
@@ -2789,6 +2796,13 @@ class Maxwell(PDE_system):
                 if not (BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
                     # print('BC', compID, BC.max_bond(), BC.canon_site)
+
+
+            print('precomp ranks')
+            for k, comp in new_sys.E.components.items():
+                print('E comp', k, comp.max_bond(), comp.all_virtual_sizes())
+            for k, comp in new_sys.B.components.items():
+                print('B comp', k, comp.max_bond(), comp.all_virtual_sizes())
 
             new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
             new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
@@ -3699,21 +3713,32 @@ class Maxwell(PDE_system):
 
             if do_cross and do_tdvp:
                 from helper_block_tdvp_3 import block_tdvpx as block_tddmrg
+                max_bond_ = max_bond
             elif do_tdvp:
                 from helper_block_tdvp_3 import block_tdvp as block_tddmrg
+                max_bond_ = max_bond
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+                # max_bond_ = None
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
+                # max_bond_ = max_bond
             elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
+                # max_bond_ = None
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
+                # max_bond_ = max_bond
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
+                # max_bond_ = None
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
+                # max_bond_ = max_bond
 
             print('all field mps', all_fields_mps)
 
             updated_field_mps, info = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
                                              b_vecs=explicit_part_mps, masks=mask_dict, init_direction=direction,
                                              # constraints=constraints, constraint_vals=constraint_vals,
-                                             max_bond=max_bond, te_order=te_order, cutoff=cutoff,
+                                             max_bond=max_bond_, te_order=te_order, cutoff=cutoff,
                                              backward_weights=backward_weights, do_adapt=do_tdvp,
                                              grid=self.grid_X, return_info=True, verbose_plot=self.verbose_plot)
 
@@ -3766,11 +3791,13 @@ class Maxwell(PDE_system):
             if Ecomp is not None:
                 Ecomp.info['num_evals'] = info['num_evals'].get(it, 0) if info is not None else 0
                 Ecomp.info['internal_rank'] = Ecomp.max_bond()
+                print('E internal max bond', it, Ecomp.info['internal_rank'])
 
             Bcomp = new_sys.B[compID]
             if Bcomp is not None:
                 Bcomp.info['num_evals'] = info['num_evals'].get(it + 3, 0) if info is not None else 0
                 Bcomp.info['internal_rank'] = Bcomp.max_bond()
+                print('B internal max bond', it, Bcomp.info['internal_rank'])
 
 
         new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))

@@ -161,7 +161,7 @@ def load_data_EM(VP_test,
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
                     # if nt_ > nt or nt_ % save_every_nt != 0:
-                    if nt_ % save_every_nt != 0:
+                    if nt_ % save_every_nt != 0 and nt_ != nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -397,7 +397,7 @@ def load_data_Maxwell(fstr,
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
                     # if nt_ > nt or nt_ % save_every_nt != 0:
-                    if nt_ % save_every_nt != 0:
+                    if nt_ % save_every_nt != 0 and nt_ != nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -505,6 +505,9 @@ def load_data_Aphi(fstr,
     # fstr = VP_test.get_fstr(extra_str=extra_str)
     print('A-phi load filename', fstr)
 
+    prev_A_field = init_A_field.copy()
+    prev_phi_field = init_phi_field.copy()
+
     ### load data ###
     try:
         if not load_data:  raise IOError
@@ -515,12 +518,22 @@ def load_data_Aphi(fstr,
         except (AttributeError, IOError):
             pass
 
+        try:
+            prev_A_field = init_dAdt_field.reload_data(fdir + 'Aprev_' + fstr)
+        except (AttributeError, IOError):
+            pass
+
+        try:
+            prev_phi_field = prev_phi_field.reload_data(fdir + 'phiprev_' + fstr)
+        except (AttributeError, IOError):
+            pass
+
         max_bond_A = pickle.load(open(fdir + 'maxD_A_' + fstr + '.pkl', 'rb'))
         max_bond_phi = pickle.load(open(fdir + 'maxD_phi_' + fstr + '.pkl', 'rb'))
         try:
             max_bond_dAdt = pickle.load(open(fdir + 'maxD_dAdt_' + fstr + '.pkl', 'rb'))
         except IOError:
-            max_bond_dAdt = [np.nan]
+            max_bond_dAdt = [(np.nan, np.nan, np.nan)]
 
         nrg_E_ts = pickle.load(open(fdir + 'nrg_E_' + fstr + '.pkl', 'rb'))
         nrg_B_ts = pickle.load(open(fdir + 'nrg_B_' + fstr + '.pkl', 'rb'))
@@ -544,12 +557,26 @@ def load_data_Aphi(fstr,
             except IOError:
                 pass
 
+            try:
+                prev_A_field = init_dAdt_field.reload_data(fdir + 'Aprev_' + restart_fstr)
+            except (AttributeError, IOError):
+                pass
+
+            try:
+                prev_phi_field = prev_phi_field.reload_data(fdir + 'phiprev_' + restart_fstr)
+            except (AttributeError, IOError):
+                pass
+
             max_bond_A = pickle.load(open(fdir + 'maxD_A_' + restart_fstr + '.pkl', 'rb'))
-            max_bond_phi = pickle.load(open(fdir + 'maxD_phi_' + restart_fstr + '.pkl', 'rb'))
+            try:
+                max_bond_phi = pickle.load(open(fdir + 'maxD_phi_' + restart_fstr + '.pkl', 'rb'))
+            except IOError:
+                pass
+
             try:
                 max_bond_dAdt = pickle.load(open(fdir + 'maxD_dAdt_' + restart_fstr + '.pkl', 'rb'))
             except IOError:
-                max_bond_dAdt = [np.nan]
+                max_bond_dAdt = [(np.nan, np.nan, np.nan)]
 
             nrg_E_ts = pickle.load(open(fdir + 'nrg_E_' + fstr + '.pkl', 'rb'))
             nrg_B_ts = pickle.load(open(fdir + 'nrg_B_' + fstr + '.pkl', 'rb'))
@@ -602,21 +629,38 @@ def load_data_Aphi(fstr,
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
                     # if nt_ > nt or nt_ % save_every_nt != 0:
-                    if nt_ % save_every_nt != 0:
+                    if nt_ % save_every_nt != 0 and nt_ != nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
             except NameError:
                 pass
 
-            init_A_field = init_A_field.reload_data(sdir + 'restart/A_' + re_fstr + f'-nt{nt}')
-            init_phi_field = init_phi_field.reload_data(sdir + 'restart/phi_' + re_fstr + f'-nt{nt}')
+            init_A_field = init_A_field.reload_data(sdir + 'restart/A_' + re_fstr + 
+                                                    f'-nt{nt}')
+            init_phi_field = init_phi_field.reload_data(sdir + 'restart/phi_' + re_fstr +
+                                                        f'-nt{nt}')
+
             if init_dAdt_field is not None:
                 try:
-                    init_dAdt_field = init_dAdt_field.reload_data(sdir + 'restart/dAdt_' + re_fstr + f'-nt{nt}')
+                    init_dAdt_field = init_dAdt_field.reload_data(sdir + 'restart/dAdt_' + 
+                                                                  re_fstr + f'-nt{nt}')
                 except IOError:
-                    print('dAdt not found')
-                    pass
+                    init_dAdt_field = init_dAdt_field.reload_data(sdir + 'restart/Aprev_' + 
+                                                                  re_fstr + f'-nt{nt}')
+                    print('dAdt not found; load Aprev')
+
+            try:
+                prev_A_field = init_dAdt_field.reload_data(sdir + 'restart/Aprev_' + 
+                                                           re_fstr + f'-nt{nt}')
+            except (AttributeError, IOError):
+                pass
+
+            try:
+                prev_phi_field = prev_phi_field.reload_data(sdir + 'restart/phiprev_' + 
+                                                            re_fstr + f'-nt{nt}')
+            except (AttributeError, IOError):
+                pass
 
             print('loading ranks')
             max_bond_A = pickle.load(open(sdir + 'restart/maxD_A_' + re_fstr + f'.pkl', 'rb'))
@@ -628,7 +672,7 @@ def load_data_Aphi(fstr,
             try:
                 max_bond_dAdt = pickle.load(open(sdir + 'restart/maxD_dAdt_' + re_fstr + f'.pkl', 'rb'))
             except IOError:
-                max_bond_dAdt = [np.nan]
+                max_bond_dAdt = [(np.nan, np.nan, np.nan)]
 
             try:
                 nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
@@ -662,11 +706,11 @@ def load_data_Aphi(fstr,
         print('loaded restart', nt)
 
     if tmp_data is not None:
-        return (init_A_field, init_dAdt_field, init_phi_field,
+        return (init_A_field, init_dAdt_field, init_phi_field, prev_A_field, prev_phi_field,
                 ts, nrg_E_ts, nrg_B_ts,
                 max_bond_A, max_bond_dAdt, max_bond_phi, *tmp_data)
     else:
-        return (init_A_field, init_dAdt_field, init_phi_field,
+        return (init_A_field, init_dAdt_field, init_phi_field, prev_A_field, prev_phi_field,
                 ts, nrg_E_ts, nrg_B_ts,
                 max_bond_A, max_bond_dAdt, max_bond_phi,)
 
@@ -684,15 +728,26 @@ def save_data_Aphi(fstr, Aphi_sys, fdir, extra_str='', add_fstr='',
 
     Aphi_sys.A.save_data(fdir + 'A_' + f_fstr)
     Aphi_sys.phi.save_data(fdir + 'phi_' + f_fstr)
-    if Aphi_sys.dAdt is None:
-        dAdt = Aphi_sys.compute_dAdt()
-        dAdt.save_data(fdir + 'dAdt_' + f_fstr)
+    if Aphi_sys.dAdt is None or Aphi_sys.dAdt.num_active == 0:
+        # dAdt = Aphi_sys.compute_dAdt()
+        # dAdt.save_data(fdir + 'dAdt_' + f_fstr)
+        Aprev = Aphi_sys.A_history[0]
+        print('save A prev')
+        Aprev.save_data(fdir + 'Aprev_' + f_fstr) 
     else:
         Aphi_sys.dAdt.save_data(fdir + 'dAdt_' + f_fstr)
 
+    print('stagger phi', Aphi_sys.staggered_phi)
+    if Aphi_sys.staggered_phi:
+        phi_prev = Aphi_sys.phi_history[0]
+        print('save phi prev')
+        print('phi prev', phi_prev.component)
+        phi_prev.save_data(fdir + 'phiprev_' + f_fstr)
+
     if not all(np.isnan(max_bond_A[-1])):
         pickle.dump(max_bond_A, open(fdir + 'maxD_A_' + fstr + '.pkl', 'wb'))
-    if max_bond_dAdt is not None and not all(np.isnan(max_bond_dAdt[-1])):
+    print('max bond', max_bond_dAdt[-1])
+    if (max_bond_dAdt is not None and not all(np.isnan(max_bond_dAdt[-1]))):
         pickle.dump(max_bond_dAdt, open(fdir + 'maxD_dAdt_' + fstr + '.pkl', 'wb'))
     if max_bond_phi is not None and not np.isnan(max_bond_phi[-1]):
         pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))
@@ -784,7 +839,7 @@ def load_data_ED(VD_test,
             try:
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt or nt_ % save_every_nt != 0:
+                    if nt_ > nt or nt_ % save_every_nt != 0 and nt_ != nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)

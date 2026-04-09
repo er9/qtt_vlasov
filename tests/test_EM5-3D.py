@@ -113,8 +113,11 @@ upwind = flags.get('do_upwind', False)
 print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
-dt = None  # 0.05  # 0.04  # None
-cfl = flags.get('cfl', 0.9)
+dt = flags.get('dt', None)  # None  # 0.05  # 0.04  # None
+print('dt', dt)
+use_cfl = (dt is None)
+if use_cfl:
+    cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 1 if upwind else 31)  ## 555
 upwind = (te_order != 31)
@@ -124,9 +127,13 @@ upwind = (te_order != 31)
 
 ## restart from an saved state
 load_nt = restart_from_nt
-subdir = (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
-if cfl != 0.9:
-    subdir = subdir[:-1] + f'_z{cfl}/'
+if use_cfl:
+    subdir = (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
+    if cfl != 0.9:
+        subdir = subdir[:-1] + f'_z{cfl}/'
+else:
+    subdir = (f'L{L}_te{te_order}_dt{dt}_up/' if upwind else f'L{L}_te{te_order}_dt{dt}/')
+
 subdir = f'{layout_str}/{subdir}'
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 500)
@@ -194,11 +201,13 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, ax_z, coords=[X,Y,Z])
 
 ## define time step
 dx, dy, dz, = ax_x.dx, ax_y.dx, ax_z.dx
-cfl_params = ((dx, dy, dz), (c, c, c))
-dt_cfl = cfl_limit( cfl_params )
-dt = dt_cfl * cfl if dt is None else dt
+if use_cfl:
+    cfl_params = ((dx, dy, dz), (c, c, c))
+    dt_cfl = cfl_limit( cfl_params )
+    dt = dt_cfl * cfl if dt is None else dt
+    print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/dz),)
 num_tsteps = int(round(T/dt))
-print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/dz), num_tsteps, )
+print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
 

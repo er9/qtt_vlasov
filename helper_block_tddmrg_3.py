@@ -139,6 +139,9 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
                                **solver_kwargs)
 
     solver.take_time_step(dt, init_direction=init_direction)
+    print('solver out')
+    for k, v in solver.kets.items():
+        print('precomp max bond', k, v.max_bond())
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
@@ -413,7 +416,8 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < (16 if max_bond is None else max_bond // 2))]
+            if not expand_kets:
+                expand_kets = [ii for ii, v in x_state.items() if (v.max_bond() < (16 if max_bond is None else max_bond // 2))]
             print('expand kets', expand_kets)
             if not expand_kets:
                 print('canonize (no expand)')
