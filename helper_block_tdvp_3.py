@@ -127,10 +127,11 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
 
 
     solver = BlockTDVPSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
-                               te_order=te_order, direction=init_direction,
-                               constraints=constraints, constraint_vals=constraint_vals,
-                               grid=grid, backward_weights=backward_weights,
-                               **solver_kwargs)
+                             te_order=te_order, direction=init_direction,
+                             constraints=constraints, constraint_vals=constraint_vals,
+                             grid=grid, backward_weights=backward_weights,
+                             expand_kets=True,
+                             **solver_kwargs)
 
     solver.take_time_step(dt/2, init_direction=init_direction, do_adapt=do_adapt)
     num_evals = solver.num_evals
@@ -141,11 +142,13 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
     for k, v in x_vecs.items():
         helper_quimb.compress(v, compress_opts={'max_bond': max_bond, 'cutoff': cutoff,
                                                 'form': 'right' if init_direction > 0 else 'left'},
-                              canonize=False)
+                              canonize=False,)
+
     solver = BlockTDVPSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
                              te_order=te_order, direction=init_direction * -1,
                              constraints=constraints, constraint_vals=constraint_vals,
                              grid=grid, backward_weights=backward_weights,
+                             expand_kets=True,
                              **solver_kwargs)
 
     solver.take_time_step(dt/2, init_direction=init_direction * -1, do_adapt=do_adapt)

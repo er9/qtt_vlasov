@@ -250,6 +250,7 @@ init_dA_field = Field('dAdt', grid_xyz, data={X: init_dAx_gtn, Y:init_dAy_gtn, Z
 init_phi_field = ScalarField('phi', grid_xyz, data=init_phi_gtn, compress_config=te_compress_phi, is_sqrt=True)
 
 
+prev_A_field, prev_phi_field = None, None
 try:
     ## restart problematic with leapfrog bc dAdt is not saved and is not set...
     if not restart:
@@ -260,7 +261,8 @@ try:
                                        fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt,
                                        load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_A_field, init_dA_field, init_phi_field, ts, nrg_E_ts, nrg_B_ts, max_bond_As,
+    (init_A_field, init_dA_field, init_phi_field, prev_A_field, prev_phi_field,
+     ts, nrg_E_ts, nrg_B_ts, max_bond_As,
      max_bond_dAdts, max_bond_phis,) = out
 
     nt = len(ts) - 1
@@ -269,6 +271,13 @@ try:
     init_A_field.compress(compress_opts={'cutoff': cutoff})
     init_dA_field.compress(compress_opts={'cutoff': cutoff})
     init_phi_field.compress(compress_opts={'cutoff': cutoff})
+
+    if prev_A_field.num_active == 0:
+        prev_A_field = None
+        if te_order == 31:
+            raise IOError
+    if prev_phi_field.num_active == 0:
+        prev_phi_field = None
 
     print("restarted")
 
@@ -305,6 +314,13 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 ap_sys = VectorPotential(init_A_field, init_dA_field, init_phi_field,
                          coords_x=coord_sys, matl_params=matl_config,
                          te_order=te_order, compress_levels=comp_levels)
+
+if prev_A_field is not None:
+    ap_sys.A_history = [prev_A_field]
+
+if prev_phi_field is not None:
+    ap_sys.phi_history = [prev_phi_field]
+
 
 
 while nt < num_tsteps:
@@ -452,8 +468,14 @@ if save_data:
                               ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
                               max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
 
+    test_setup.save_data_Aphi(fstr, ap_sys, fdir + subdir, 
+                              ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
+                              max_bond_A=max_bond_As, max_bond_dAdt=max_bond_dAdts, max_bond_phi=max_bond_phis)
+
     ap_sys.compute_E(compress_level=3)
     ap_sys.compute_B(compress_level=3)
+    ap_sys.E.save_data(fdir + subdir + 'E')
+    ap_sys.B.save_data(fdir + subdir + 'B')
 
     for compID in ap_sys.E.componentIDs:
         E_data = ap_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts // 2})

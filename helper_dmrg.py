@@ -897,7 +897,7 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
     #         if soln_mps.site_ind(mi) not in soln_mps[mi].inds:
     #             init_guess[mi].isel({init_guess.site_ind(mi): 0}, inplace=True)
 
-    print('dmrg solver')
+    print('dmrg solver nsites', opt_nsites)
     solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
                           conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
                           **solve_kwargs)

@@ -167,7 +167,9 @@ class VectorPotential(PDE_system):
         self._fields['dphidt'] = new_field
 
     # @property
-    def compute_dAdt(self, dt: Numeric, compress_level=1):
+    def compute_dAdt(self, dt: Numeric=None, compress_level=1):
+        if dt is None:
+            dt = self.dt
         if self.history_length == 1:
             A1 = self.A_history[-1]
             dAdt = self.A.add(A1.scalar_multiply(-1, inplace=False), inplace=False,
@@ -413,6 +415,8 @@ class VectorPotential(PDE_system):
         elif str(self.te_order)[:2] == '22':
             if str(self.te_order)[-1] == '1':
                 state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '0':
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level, solver_kwargs={'adaptive_solve': False, 'opt_nsites':1})
             elif str(self.te_order)[-1] == '3':
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             elif str(self.te_order)[-1] == '4':
@@ -727,7 +731,8 @@ class VectorPotential(PDE_system):
 
     def crank_nicolson(self, dt, time: float = None, use_A2=True, inplace=False,
                        err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
-                       compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+                       compress_level: int = 1, verbose_plot=False, solver_kwargs=None,
+                       **deriv_kwargs):
         """
         d/dt A = dA/dt
         d/dt dA/dt = c^2 * lapl(A) + 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
@@ -748,7 +753,11 @@ class VectorPotential(PDE_system):
 
         new_sys = self if inplace else self.copy()
         use_dmrg = True
-        try_adaptive_solve = False
+        if solver_kwargs is None:
+            solver_kwargs = {}
+        # try_adaptive_solve = False
+        try_adaptive_solve = solver_kwargs.pop('adaptive_solve', True)  # False
+        print('adaptive solve', try_adaptive_solve)
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -780,7 +789,7 @@ class VectorPotential(PDE_system):
 
             sourceF = jF
 
-            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs):
+            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs_):
 
                 sourceF_dt = None
                 if sourceF is not None and sourceF.data is not None:
@@ -828,7 +837,7 @@ class VectorPotential(PDE_system):
                 print('implicit dmrg solve', compress_opts)
                 updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, use_A2=use_A2, is_H=False,
                                                     # init_guess=fields_vec,    ## actually gives wrong answer
-                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
+                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs_)
                 # exit()
                 if verbose_output:
                     return updated_F1, err, is_conv
@@ -844,9 +853,24 @@ class VectorPotential(PDE_system):
             else:
 
                 if try_adaptive_solve:
-                    raise NotImplementedError
+                    nt, max_nt, is_conv = self.nt, 4, False
+
+                    old_fields_vec = all_fields_vec
+                    while (not is_conv) and nt <= max_nt:
+                        print('nt', nt)
+                        new_F1 = old_fields_vec
+                        for step in range(nt):
+                            new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, **solver_kwargs)
+                            if nt < max_nt and (not is_conv) and err > 1.0e-3:
+                                nt = min(nt + 1, max_nt)
+                                break
+
+                            is_conv = (step == nt - 1)  ## reached the last step
+
+                    self.nt = nt
+                    # raise NotImplementedError
                 else:
-                    new_F1 = _implicit_solver(dt, all_fields_vec)
+                    new_F1 = _implicit_solver(dt, all_fields_vec, **solver_kwargs)
 
             # reset fields
             for i in range(3):
@@ -1242,10 +1266,10 @@ class VectorPotential(PDE_system):
                 max_bond_ = max_bond
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
-                max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
             elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
-                max_bond_ = max_bond * (4 if te_order == 4 else 2)  if max_bond is not None else None
+                max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
                 max_bond_ = max_bond * (4 if te_order == 4 else 2) if max_bond is not None else None
@@ -1314,7 +1338,7 @@ class VectorPotential(PDE_system):
 
 
         new_sys.A.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
-        new_sys.dAdt.compress(inplace=True, compress_level=1) # norm_cutoff=np.sqrt(cutoff))
+        new_sys.dAdt.compress(inplace=True, compress_level=1,) # norm_cutoff=np.sqrt(cutoff))
         new_sys.phi.compress(inplace=True, compress_level=1)
 
         # print('new sys A', new_sys.A)

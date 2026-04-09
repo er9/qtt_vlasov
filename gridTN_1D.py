@@ -621,16 +621,17 @@ class GridTN1D(GridTN):
             # print('solve compress opts', compress_opts)
             init_guess_data = init_guess.data if init_guess is not None else None
             max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
+            opt_nsites = kwargs.pop('opt_nsites', DEFAULT_OPT_NSITES)
             if use_A2:
                 out_data, err, is_conv = \
                     helper_dmrg_2.dmrg_solve_2(grid_mpx1.data, operator.data, init_guess=init_guess_data,
-                                               opt_nsites=DEFAULT_OPT_NSITES, is_H=is_H,
+                                               opt_nsites=opt_nsites, is_H=is_H,
                                                max_bond=max_bond, solve_type=DEFAULT_SOLVE_TYPE, **kwargs,
                                                )
             else:
                 out_data, err, is_conv = \
                     helper_dmrg.dmrg_solve(grid_mpx1.data, operator.data, init_guess=init_guess_data,
-                                           opt_nsites=DEFAULT_OPT_NSITES, is_H=is_H,
+                                           opt_nsites=opt_nsites, is_H=is_H,
                                            max_bond=max_bond, solve_type=DEFAULT_SOLVE_TYPE, **kwargs,
                                            )
 
