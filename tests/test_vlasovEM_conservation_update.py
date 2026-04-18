@@ -123,6 +123,6 @@ print('proj Ax_ddx distance', helper_quimb.distance(proj_Axddx_, Ax_ddx_.data))
 proj_Axddy_ = proj_mps(Ax_ddy_.data, proj_ddy.data, cur_orthog)
 print('proj Ax_ddx distance', helper_quimb.distance(proj_Axddy_, Ax_ddy_.data))
 
-print('diff Ax, Ax new', helper_quimb.distance(proj_Axddx_, proj_Axddx))
-print('diff Ay, Ay new', helper_quimb.distance(proj_Axddy_, proj_Axddy))
+print('diff Ax, Ax new (should be nonzero)', helper_quimb.distance(proj_Axddx_, proj_Axddx))
+print('diff Ay, Ay new (should be nonzero)', helper_quimb.distance(proj_Axddy_, proj_Axddy))
 

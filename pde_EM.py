@@ -280,6 +280,7 @@ class Maxwell(PDE_system):
         ## charge and current densities
         self.charge_density = None
         self.current_density = None
+        self.current_density_ddt = None
         self.E_exclude = [] if E_exclude is None else E_exclude
         self.B_exclude = [] if B_exclude is None else B_exclude
 
@@ -388,6 +389,7 @@ class Maxwell(PDE_system):
 
         new_system.charge_density = self.charge_density
         new_system.current_density = self.current_density
+        new_system.current_density_ddt = self.current_density_ddt
         new_system.rel_eps_inv = self.rel_eps_inv
         new_system.E_exclude = self.E_exclude
         new_system.B_exclude = self.B_exclude
@@ -553,7 +555,10 @@ class Maxwell(PDE_system):
         elif self.te_order==1:
             state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
         elif self.te_order==2:
-            state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
+            if self.upwind:
+                state_t = self.lax_wendroff(dt)
+            else:
+                state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
         elif self.te_order==3:
             state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
         elif self.te_order==4:
@@ -704,6 +709,235 @@ class Maxwell(PDE_system):
             state1.time += dt
 
         return state1
+
+
+    def lax_wendroff(self, dt, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+                     **kwargs):
+        """
+        A^2 = c^2 * diag(0, 1, 1, 0, 1, 1)
+
+        x-flux  at interfaces i+1/2:
+            The x-flux involves (Ey, Ez, Hy, Hz) — the components
+            transverse to x. The x-flux vector is:
+            F = [0, -Hz/eps, Hy/eps, 0, Ez/mu, -Ey/mu]
+            flux_{i+1/2} = 0.5*(F_i + F_{i+1}) - 0.5*(dt/dx)*A^2*(Q_{i+1} - Q_i)
+        --> (flux_{i+1/2} - flux_{i-1/2}) /dx * dt = 0.5 * (F_i + F_{i+1}) / dx - 0.5 * (dt**2/dx) * A^2 * (Q_{i+1} - Q_i)
+                                                  -( 0.5 * (F_{i-1} + F_i) / dx - 0.5 * (dt**2/dx) * A^2 * (Q_{i} - Q_{i-1})
+                    = 0.5 (F_{i+1} - F_{i-1}) /dx * dt - 0.5 * (dt**2/dx**2) * A^2 * (Q_{i+1} - 2 Q_i + Q_{i-1})
+
+        x-cross corrections:
+            # d^2Q/(dx dy) via centered differences on the 4 diagonal neighbors
+            ## axis = 0 contains the different fields), which is why the indexing starts at 1
+            d2_xy = (Q_xpyp - Q_xpym - Q_xmyp + Q_xmym) / (4.0 * dx * dy)
+
+            # AB contribution: row 0 (Ex) <- -c^2 * d^2(Ey)/(dx dy)
+            #                  row 3 (Hx) <- -c^2 * d^2(Hy)/(dx dy)
+            cross[0] += -coeff * d2_xy[1]
+            cross[3] += -coeff * d2_xy[4]
+
+            Ex: d2_xy @ Ey = (Q(i+1,j+1,k) - Q(i+1,j-1,k) - Q(i-1,j+1,k) + Q(i-1,j-1),k) @ Ey
+                d2_xz @ Ez = (Q(i+1,j,k+1) - Q(i+1,j,k-1) - Q(i-1,j,k+1) + Q(i-1,j,k-1)) @ Ez
+
+                (Q(i+1,j+1,k) - Q(i+1,j-1,k) - Q(i-1,j+1,k) + Q(i-1,j-1),k)
+                    is just d/dx [centered 1] @ d/dy [centered,1]
+                    df/dx = (f_(i+1,j) - f_(i-1,j))
+                    d2/dxdy f = (f_{i+1,j+1} - f_{i-1,j+1}) - (f_{i+1,j-1} - f_{i-1,j-1})
+
+
+        """
+        flux_E_tot, flux_B_tot = {}, {}
+        cross_E_tot, cross_B_tot = {}, {}
+
+        dt = self.dt if dt is None else dt
+        c = self.matl_params.c
+        coeff = 0.5 * dt ** 2 * c**2
+
+        print('in LW')
+
+        for Ec in self.E.components.values():
+            if Ec is not None:
+                for ax, ax_bc in Ec.ax_deriv_configs.items():
+                    ax_bc.order = 1
+                    ax_bc.fd_type = FDType.CENTER
+
+        for Bc in self.B.components.values():
+            if Bc is not None:
+                for ax, ax_bc in Bc.ax_deriv_configs.items():
+                    ax_bc.order = 1
+                    ax_bc.fd_type = FDType.CENTER
+
+        for i0 in range(3):
+
+            flux_E, flux_B = {}, {}
+            cross_E, cross_B = {}, {}
+
+            i1, i2 = (i0 + 1) % 3, (i0 + 2) % 3
+            c0, c1, c2 = self.coords_x.get_coord(i0), self.coords_x.get_coord(i1), self.coords_x.get_coord(i2)
+            ax0, ax1, ax2 = self.coords_x.get_axis(c0), self.coords_x.get_axis(c1), self.coords_x.get_axis(c2)
+
+            # print('ax0', ax0, 'ax1', ax1, 'ax2', ax2)
+            # print('c0', c0, 'c1', c1, 'c2', c2)
+
+            E1 = self.E.components.get(c1, None)
+            E2 = self.E.components.get(c2, None)
+
+            B1 = self.B.components.get(c1, None)
+            B2 = self.B.components.get(c2, None)
+
+            # print('E1', E1)
+            # print('E2', E2)
+            # print('B1', B1)
+            # print('B2', B2)
+
+            if ax0 is None:
+                continue
+
+            ## E field
+            flux_E1_1 = B2.take_firstderivative(ax0).scalar_multiply(-self.dt / c) if B2 is not None else None
+            # print('B2 take first derivative')
+            flux_E1_2 = E1.take_secondderivative(ax0, None).scalar_multiply(coeff) \
+                            if E1 is not None else None
+            flux_E1 = flux_E1_1.add(flux_E1_2) if flux_E1_1 is not None else flux_E1_2
+            flux_E[c1] = flux_E1
+            # print('flux E1', c1, flux_E1)
+
+            flux_E2_1 = B1.take_firstderivative(ax0).scalar_multiply(self.dt / c) if B1 is not None else None
+            flux_E2_2 = E2.take_secondderivative(ax0, None).scalar_multiply(coeff) \
+                            if E2 is not None else None
+            flux_E2 = flux_E2_1.add(flux_E2_2) if flux_E2_1 is not None else flux_E2_2
+            flux_E[c2] = flux_E2
+            # print('flux E2', c2, flux_E2)
+
+            ## B field
+            flux_B1_1 = E2.take_firstderivative(ax0).scalar_multiply(self.dt) if E2 is not None else None
+            flux_B1_2 = B1.take_secondderivative(ax0, None).scalar_multiply(coeff) \
+                            if B1 is not None else None
+            flux_B1 = flux_B1_1.add(flux_B1_2) if flux_B1_1 is not None else flux_B1_2
+            flux_B[c1] = flux_B1
+            # print('flux B1', c1, flux_B1)
+
+            flux_B2_1 = E1.take_firstderivative(ax0).scalar_multiply(-self.dt) if E1 is not None else None
+            flux_B2_2 = B2.take_secondderivative(ax0, None).scalar_multiply(coeff) \
+                            if B2 is not None else None
+            flux_B2 = flux_B2_1.add(flux_B2_2) if flux_B2_1 is not None else flux_B2_2
+            flux_B[c2] = flux_B2
+            # print('flux B2', c2, flux_B2)
+
+            ### cross correction terms
+            ## E field
+            cross_E1_term = None
+            if E1 is not None and ax0 is not None and ax1 is not None:
+                E1_d2_01 = E1.take_secondderivative(ax0, ax1)
+                # print('E1 d2 01', c1, E1_d2_01.frobenius_norm())
+                cross_E1_term = E1_d2_01
+
+            if E2 is not None and ax0 is not None and ax2 is not None:
+                E2_d2_02 = E2.take_secondderivative(ax0, ax2)
+                # print('E2 d2 02', c2, E2_d2_02.frobenius_norm())
+                if cross_E1_term is not None:
+                    cross_E1_term.add(E2_d2_02, compress=True)
+                else:
+                    cross_E1_term = E2_d2_02
+
+            if cross_E1_term is not None:
+                cross_E1_term.scalar_multiply(-coeff, inplace=True)
+                cross_E[c0] = cross_E1_term
+                # print('cross E', c0, cross_E1_term.frobenius_norm())
+
+            ## B field
+            cross_B1_term = None
+            if B1 is not None and ax0 is not None and ax1 is not None:
+                B1_d2_01 = B1.take_secondderivative(ax0, ax1)
+                # print('B1 d2 01', c1, B1_d2_01.frobenius_norm())
+                cross_B1_term = B1_d2_01
+
+                # if B1_d2_01.data is not None:
+                #     plt.figure()
+                #     plt.imshow(B1.get_data())
+                #     plt.title('B1')
+                #     plt.colorbar()
+                #
+                #     plt.figure()
+                #     plt.imshow(B1_d2_01.get_data())
+                #     plt.title('B1 d2 01')
+                #     plt.colorbar()
+                #     plt.show()
+
+            if B2 is not None and ax0 is not None and ax2 is not None:
+                B2_d2_02 = B2.take_secondderivative(ax0, ax2)
+                # print('B2 d2 02', c2, B2_d2_02.frobenius_norm())
+                if cross_B1_term is not None:
+                    cross_B1_term.add(B2_d2_02, compress=True)
+                else:
+                    cross_B1_term = B2_d2_02
+
+                # if B2_d2_02.data is not None:
+                #     plt.figure()
+                #     plt.imshow(B2.get_data())
+                #     plt.title('B2')
+                #     plt.colorbar()
+                #
+                #     plt.figure()
+                #     plt.imshow(B2_d2_02.get_data())
+                #     plt.title('B2 d2 02')
+                #     plt.colorbar()
+                #     plt.show()
+
+
+            if cross_B1_term is not None:
+                cross_B1_term.scalar_multiply(-coeff, inplace=True)
+                cross_B[c0] = cross_B1_term
+                # print('cross B', c0, cross_B1_term.frobenius_norm())
+
+            # print('coeff', coeff)
+            # pdb.set_trace()
+
+            # print('flux E', flux_E)
+            # print('flux B', flux_B)
+
+            for ci in [c0, c1, c2]:
+                flux_Ei = flux_E.get(ci, None)
+                if flux_Ei is not None:
+                    flux_E_tot[ci] = flux_E_tot[ci].add(flux_Ei) if ci in flux_E_tot else flux_Ei
+                flux_Bi = flux_B.get(ci, None)
+                if flux_Bi is not None:
+                    flux_B_tot[ci] = flux_B_tot[ci].add(flux_Bi) if ci in flux_B_tot else flux_Bi
+
+                cross_Ei = cross_E.get(ci, None)
+                if cross_Ei is not None:
+                    cross_E_tot[ci] = cross_E_tot[ci].add(cross_Ei) if ci in cross_E_tot else cross_Ei
+                cross_Bi = cross_B.get(ci, None)
+                if cross_Bi is not None:
+                    cross_B_tot[ci] = cross_B_tot[ci].add(cross_Bi) if ci in cross_B_tot else cross_Bi
+
+        eps0 = self.matl_params.eps0
+        source = self.current_density.scalar_multiply(-dt / eps0)
+        ddt_source = self.current_density_ddt.scalar_multiply(dt**2 * 0.5 / eps0)
+
+        # print('source', source.components)
+        # print('ddt source', ddt_source.components)
+
+        out_E = self.E if inplace else self.E.copy()
+        out_E.add(self.E.create_like(flux_E_tot), inplace=True)   ## dt/dx already included
+        out_E.add(self.E.create_like(cross_E_tot), inplace=True)   ## dt/dx already included
+        out_E.add(source, inplace=True)     ## -dt already included
+        out_E.add(ddt_source, compress_level=1, inplace=True)   ## dt already included
+
+        out_B = self.B if inplace else self.B.copy()
+        out_B.add(self.B.create_like(flux_B_tot), inplace=True)  ## dt/dx already included
+        out_B.add(self.B.create_like(cross_B_tot), inplace=True, compress_level=1)  ## dt/dx already included
+
+        # print('out_E', out_E.components)
+        # print('out B', out_B.components)
+
+        # pdb.set_trace()
+
+        if inplace:
+            return self
+        else:
+            out_EM = self.create_like(out_E, out_B)
+            return out_EM
+
 
     def clean_divergence(self, inplace: bool = False, constrained_E=2, constrained_B=2, clean_E=True, clean_B=True,
                          ) -> 'PDE_system':

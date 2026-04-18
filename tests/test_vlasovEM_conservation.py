@@ -405,6 +405,119 @@ print('expec 5: ', expec2)
 
 print('')
 
+###############################
+print('\nenergy conservation')
+J = vm_sys.compute_current()
+em_force = vm_sys.compute_force_term()
+vm_sys.sys_fe.set_force_term(em_force)
+mpos = vm_sys.sys_fe._get_time_evolution_mpos()   ## [d/dx, d/dvx, d/dvy, d/dvz]
+# print('mpos', mpos)
+
+## energy conservation
+ax_xs = grid_e.axes[:KX]
+ax_vs = grid_e.axes[KX:]
+
+f_gtn = vm_sys.fe.component   # grid_e.get_rand_state(64)
+f_mps = f_gtn.data
+
+## get ||v^2| > * me / 2
+v2_gtn = None
+for ax_v in ax_vs:
+    print('ax v', ax_v)
+    v2i_gtn = grid_e.make_mps_ndim({ax_v: ax_v.get_xmultiply_mps(x_power=2)})
+    if v2_gtn is None:
+        v2_gtn = v2i_gtn
+    else:
+        v2_gtn = v2_gtn.add(v2i_gtn, inplace=True, compress=True)
+v2_gtn.scalar_multiply(0.5 * mass_e, inplace=True)
+
+# f = helper_quimb.add_MPS_target(f, integ_gtn.data, direction=-1, inplace=True, do_final_update=False)
+# proj_integ = helper_quimb.target_MPS(integ_gtn.data, g, site=cur_orthog)
+
+EJ_tot = None
+for compID in [X, Y, Z]:
+    try:
+        EJ = vm_sys.E[compID].elemental_multiply(J[compID], compress=True)
+    except KeyError:
+        continue
+
+    if EJ_tot is None:
+        EJ_tot = EJ
+    else:
+        EJ_tot = EJ_tot.add(EJ, inplace=True)
+
+print('integrated E dot J', EJ_tot.integrate(is_sqrt=False))
+
+for it, mpo in enumerate(mpos):
+    expec = helper_quimb.expectation_value(f_mps, mpo.data, v2_gtn.data) * dx
+    print('expec ref', it, expec)
+
+
+out2 = helper_quimb.add_MPS_target(init_fe_mps, v2_gtn.data,
+                                   do_final_update=False, direction=direction)
+out2 = helper_quimb.canonize(out2, scale=False, i=cur_orthog)
+proj_v2 = proj_mps(v2_gtn.data.copy(), out2, cur_orthog)
+
+for it, mpo in enumerate(mpos):
+    expec2 = helper_quimb.expectation_value(f_mps, mpo.data, proj_v2) * dx
+    print('expec (should match): ', it, expec2)
+
+
+
+################################
+print('\nmomentum conservation')
+J = vm_sys.compute_current()
+rho = vm_sys.sys_fe.compute_density()
+mpos = vm_sys.sys_fe._get_time_evolution_mpos()   ## [d/dx, d/dvx, d/dvy, d/dvz]
+# print('mpos', mpos)
+
+ax_xs = grid_e.axes[:KX]
+ax_vs = grid_e.axes[KX:]
+
+g_gtn = vm_sys.fe.component   # grid_e.get_rand_state(64)
+g = g_gtn.data
+
+compIDs = [X, Y, Z]
+
+for it, ax_v in enumerate(ax_vs):
+
+    it1, it2 = (it + 1) % 3, (it + 2) % 3
+
+    B_comp = vm_sys.B.components.get(compIDs[it1], None)
+    J_comp = J.components.get(compIDs[it1], None)
+
+    if B_comp is not None and J_comp is not None:
+        BJ = B_comp.elemental_multiply(J_comp)
+        expec_BJ = BJ.integrate(is_sqrt=False)
+    else:
+        expec_BJ = 0
+    print('expec Bj', expec_BJ)
+
+    E_comp = vm_sys.E.components.get(compIDs[it], None)
+    if E_comp is not None:
+        rhoE = E_comp.elemental_multiply(rho.component)
+        expec_EJ = rhoE.integrate(is_sqrt=False)
+    else:
+        expec_EJ = 0
+    print('expec rhoE', expec_EJ)
+
+    ## get |vi > * me
+    vi_gtn = grid_e.make_mps_ndim({ax_v: ax_v.get_xmultiply_mps(x_power=1)})
+    vi_gtn.scalar_multiply(mass_e, inplace=True)
+
+    for it, mpo in enumerate(mpos):
+        expec = helper_quimb.expectation_value(g, mpo.data, vi_gtn.data) * dx
+        print('expec ref', it, expec)
+
+    out2 = helper_quimb.add_MPS_target(init_fe_mps, vi_gtn.data,
+                                       do_final_update=False, direction=direction)
+    out2 = helper_quimb.canonize(out2, scale=False, i=cur_orthog)
+    proj_vi = proj_mps(vi_gtn.data.copy(), out2, cur_orthog)
+
+    expec2 = helper_quimb.expectation_value(g_gtn.data, mpo.data, proj_vi) * dx
+    print('expec (should match): ', it, expec2)
+
+
 exit()
 
 

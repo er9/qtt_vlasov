@@ -178,7 +178,7 @@ def calc_deriv(Bx: np.ndarray, By: np.ndarray, Ez: np.ndarray, Jz: np.ndarray):
     return dBxdt, dBydt, dEzdt
 
 
-# ### FDTD ###
+### FDTD ###
 # def euler(dt, Bx, By, Ez, Jz, deriv=None):
 #     print('FDTD')
 #     if deriv is None:
@@ -242,7 +242,7 @@ while nt < num_tsteps:
     Bx_, By_, Ez_ = euler(dt, Bx_, By_, Ez_, Jz_)
     nt += 1
 
-    if nt%10 == 0:
+    if nt%100 == 0:
         plt.figure()
         plt.imshow(Ez_)
         plt.title('Ez')
@@ -254,11 +254,64 @@ while nt < num_tsteps:
         plt.colorbar()
         plt.show()
 
-        plt.figure()
-        plt.plot(Ez_)
-        plt.title('Ez')
+def plot_final_state(Q, x, y):
+    """Plot the final state of all three field components."""
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    labels = [r'$E_z$', r'$H_x$', r'$H_y$']
 
-        plt.figure()
-        plt.plot(Bx_)
-        plt.title('Bx')
-        plt.show()
+    for idx, ax in enumerate(axes):
+        vmax = np.max(np.abs(Q[idx])) * 0.8
+        if vmax == 0:
+            vmax = 1.0
+        im = ax.pcolormesh(
+            x, y, Q[idx].T,
+            shading='auto', cmap='RdBu_r',
+            vmin=-vmax, vmax=vmax
+        )
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title(labels[idx])
+        ax.set_aspect('equal')
+        fig.colorbar(im, ax=ax, shrink=0.8)
+
+    plt.suptitle('2D Dipole Radiation (FV) — Final State', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('dipole_radiation_final.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+
+def plot_field_along_axes(Q, x, y, x0, y0):
+    """
+    Plot cross-sections of Ez along the x and y axes
+    passing through the dipole location.
+    """
+    ix0 = np.argmin(np.abs(x - x0))
+    iy0 = np.argmin(np.abs(y - y0))
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].plot(x, Q[0][:, iy0], 'b-', linewidth=1.2)
+    axes[0].set_xlabel('x')
+    axes[0].set_ylabel(r'$E_z$')
+    axes[0].set_title(f'$E_z$ along y = {y[iy0]:.2f}')
+    axes[0].grid(True, alpha=0.3)
+    axes[0].axvline(x0, color='r', linestyle='--', alpha=0.5,
+                    label='Source')
+    axes[0].legend()
+
+    axes[1].plot(y, Q[0][ix0, :], 'b-', linewidth=1.2)
+    axes[1].set_xlabel('y')
+    axes[1].set_ylabel(r'$E_z$')
+    axes[1].set_title(f'$E_z$ along x = {x[ix0]:.2f}')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].axvline(y0, color='r', linestyle='--', alpha=0.5,
+                    label='Source')
+    axes[1].legend()
+
+    plt.suptitle('Field Cross-Sections Through Dipole', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('dipole_cross_sections.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+plot_final_state([Ez_, Bx_, By_], x0_vals, y0_vals)
+plot_field_along_axes([Ez_, Bx_, By_], x0_vals, y0_vals, x0=0.0, y0=0.0)

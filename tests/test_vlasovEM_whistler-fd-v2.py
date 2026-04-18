@@ -775,8 +775,8 @@ while ts[-1] < T:
         ## so that we get desired dissipation (sqrt(cutoff)) per time step
 
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=use_rk4,
-                                   direction=(1 if nt % 2 == 0 else -1))
+                                   is_first_time_step=use_rk4,)
+                                   # direction=(1 if nt % 2 == 0 else -1))
 
     # if dissipation:   ## or include this after during split step, eg?
     #     vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_e)
@@ -849,6 +849,12 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt ) == 0:
+
+        plt.figure()
+        plt.plot(ts, max_bond_fe)
+        plt.xlabel('t')
+        plt.ylabel('rank')
+        plt.show()
 
         print('HERE')
         if save_data:

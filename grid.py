@@ -1180,8 +1180,7 @@ class Grid:
         except KeyError:
             coordsys1 = ax1.coord_sys
             coordsys2 = ax2.coord_sys
-
-            if coordsys1 is coordsys2 or coordsys2 is None:
+            if ((coordsys1 is coordsys2 or coordsys2 is None) and ax1 == ax2) or ax2 is None:
                 mpo_dict = coordsys1.build_secondderivative_mpo(ax1, None, deriv_config1, None)
             else:
                 mpo_dict1 = coordsys1.build_firstderivative_mpo(ax1, deriv_config1)

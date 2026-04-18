@@ -373,6 +373,14 @@ def distance(tn1, tn2, method='auto'):
     tn2 = tn2.copy()
     tn1.distribute_exponent()
     tn2.distribute_exponent()
+    if isinstance(tn1, qtn.MatrixProductOperator):
+        tn1.upper_ind_id = 'tmp111{}'
+        tn1.lower_ind_id = 'tmp222{}'
+        tn2.upper_ind_id = 'tmp111{}'
+        tn2.lower_ind_id = 'tmp222{}'
+    elif isinstance(tn1, qtn.MatrixProductState):
+        tn1.site_ind_id = 'tmp111{}'
+        tn2.site_ind_id = 'tmp111{}'
     # print('distance tn norms', tn1.norm(), tn2.norm())
     return qtn.tensor_network_distance(tn1, tn2, method=method)
 

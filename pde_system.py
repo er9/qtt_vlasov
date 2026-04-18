@@ -88,7 +88,10 @@ class PDE_system:
         self.time = 0    # can use to keep track of time
         self.dt = 0
         ref_field = next((item for item in fields if item is not None), None)
-        self.grid = ref_field.grid if grid is None else grid
+        if grid is not None:
+            self.grid = grid
+        else:
+            self.grid = ref_field.grid if ref_field is not None else None
 
         self.do_normalization = normalize
         self.conservative = conservative
@@ -683,7 +686,7 @@ class PDE_system:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
                 try:
-                    raise ValueError
+                    # raise ValueError
                     state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                                   verbose_plot=verbose_plot, )

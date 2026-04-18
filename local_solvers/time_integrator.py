@@ -163,6 +163,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         LocalTerm = self.term_class()
         compress_opts = {'max_bond': self.max_bond, 'cutoff': self.cutoff}
+        print('compress opts', compress_opts)
 
         term_self = LocalTerm(ket_state)
         self.self_term = term_self
@@ -726,7 +727,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('site tens', site_tens.inds, site_tens.data)
         self.num_evals += ket_x.size
-        print('self.num evals', self.num_evals, ket_x.size)
+        # print('self.num evals', self.num_evals, ket_x.size)
 
         if deriv is None:
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)

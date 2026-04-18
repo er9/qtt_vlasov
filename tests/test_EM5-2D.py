@@ -1,3 +1,5 @@
+import pdb
+
 import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
@@ -189,9 +191,9 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 ## define axis objects
-x_vals = np.linspace(-Lx,Lx,npts,endpoint=True)
+x_vals = np.linspace(-Lx,Lx,npts,endpoint=False)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
-y_vals = np.linspace(-Ly,Ly,npts,endpoint=True)
+y_vals = np.linspace(-Ly,Ly,npts,endpoint=False)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 
 x_map = helper_test.get_maps(x_map_key)[0]
@@ -209,11 +211,14 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 ## define time step
 dx, dy, = ax_x.dx, ax_y.dx,
 if use_cfl:
-    cfl_params = ((dx, dy), (c, c))
-    dt_cfl = cfl_limit( cfl_params )
+    # cfl_params = ((dx, dy), (c, c))
+    # dt_cfl = cfl_limit( cfl_params )
+    dt_cfl = 1. / (c * np.sqrt(1.0 / dx ** 2 + 1.0 / dy ** 2))
     dt = dt_cfl * cfl if dt is None else dt
-    print('dt', dt, cfl * 1. / (c / ax_x.dx + c / ax_y.dx) )
-num_tsteps = int(round(T/dt))
+    # print('dt', dt, cfl * 1. / (c / ax_x.dx + c / ax_y.dx) )
+    print('dt', dt, cfl * 1. / (c * np.sqrt(1.0 / dx ** 2 + 1.0 / dy ** 2)))
+dt = 0.02469136
+num_tsteps = int(np.ceil(T/dt))
 print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
@@ -223,10 +228,15 @@ grid_xyz = Grid1D('XYZ', (ax_x, ax_y), layout_type=TN_layout)
 
 ## define "delta function" in space for the current source
 print('ax_x', ax_x.npts, ax_x.map, ax_y.map)
+# delta_fct_gtn = grid_xyz.make_mps_ndim(
+#     {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
+#      ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
+#      })
 delta_fct_gtn = grid_xyz.make_mps_ndim(
-    {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
-     ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
+    {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2]),
+     ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2]),
      })
+
 
 
 if dissipation == 'max':
@@ -243,6 +253,11 @@ def Jz_gtn(t):
     jz = delta_fct_gtn.scalar_multiply(np.sin(omega * t) * I0, inplace=False)
     print('jz', t, np.sin(omega * t) * I0)
     return jz
+
+def Jz_ddt_gtn(t):
+    jz_ddt = delta_fct_gtn.scalar_multiply(np.cos(omega * t) * omega * I0, inplace=False)
+    print('jz_ddt', t, np.cos(omega * t) * omega * I0)
+    return jz_ddt
 
 
 data_x, data_y = np.meshgrid(x_vals,y_vals,indexing='ij')
@@ -339,7 +354,8 @@ while nt < num_tsteps:
     time1 = time.time()
 
     ## set the current density in the EM solver
-    em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
+    em_sys.current_density = Field('J', grid_xyz, data={Z: Jz_gtn(ts[-1])})
+    em_sys.current_density_ddt = Field('J', grid_xyz, data={Z: Jz_ddt_gtn(ts[-1])})
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False)
@@ -367,7 +383,7 @@ while nt < num_tsteps:
     print('divE', em_sys.check_poisson().norm())
 
     E_bonds = [em_sys.E.max_bond(C) for C in [X, Y, Z]]
-    B_bonds = [em_sys.B[C].max_bond() for C in [X, Y, Z]]
+    B_bonds = [em_sys.B.max_bond(C) for C in [X, Y, Z]]
     print('max bonds', E_bonds, B_bonds)
 
     ## obtain max QTT rank for each component of the E field
@@ -410,6 +426,14 @@ while nt < num_tsteps:
             plt.colorbar()
             if save_figs:
                 plt.savefig(fdir + subdir + f'Bx_nt{nt}.png', dpi=300)
+                plt.close()
+        if By is not None:
+            plt.figure()
+            plt.imshow(By) #, vmin=-1e-3, vmax=1e-3)
+            plt.title('By')
+            plt.colorbar()
+            if save_figs:
+                plt.savefig(fdir + subdir + f'By_nt{nt}.png', dpi=300)
                 plt.close()
         plt.show()
 
@@ -470,6 +494,72 @@ print('em sys B', em_sys.B.components)
 #     plt.show()
 
 
+def plot_final_state(Q, x, y):
+    """Plot the final state of all three field components."""
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    labels = [r'$E_z$', r'$H_x$', r'$H_y$']
+
+    for idx, ax in enumerate(axes):
+        vmax = np.max(np.abs(Q[idx])) * 0.8
+        if vmax == 0:
+            vmax = 1.0
+        im = ax.pcolormesh(
+            x, y, Q[idx].T,
+            shading='auto', cmap='RdBu_r',
+            vmin=-vmax, vmax=vmax
+        )
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title(labels[idx])
+        ax.set_aspect('equal')
+        fig.colorbar(im, ax=ax, shrink=0.8)
+
+    plt.suptitle('2D Dipole Radiation (QTT) — Final State', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('dipole_radiation_final.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+def plot_field_along_axes(Q, x, y, x0, y0):
+    """
+    Plot cross-sections of Ez along the x and y axes
+    passing through the dipole location.
+    """
+    ix0 = np.argmin(np.abs(x - x0))
+    iy0 = np.argmin(np.abs(y - y0))
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].plot(x, Q[0][:, iy0], 'b-', linewidth=1.2)
+    axes[0].set_xlabel('x')
+    axes[0].set_ylabel(r'$E_z$')
+    axes[0].set_title(f'$E_z$ along y = {y[iy0]:.2f}')
+    axes[0].grid(True, alpha=0.3)
+    axes[0].axvline(x0, color='r', linestyle='--', alpha=0.5,
+                    label='Source')
+    axes[0].legend()
+
+    axes[1].plot(y, Q[0][ix0, :], 'b-', linewidth=1.2)
+    axes[1].set_xlabel('y')
+    axes[1].set_ylabel(r'$E_z$')
+    axes[1].set_title(f'$E_z$ along x = {x[ix0]:.2f}')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].axvline(y0, color='r', linestyle='--', alpha=0.5,
+                    label='Source')
+    axes[1].legend()
+
+    plt.suptitle('Field Cross-Sections Through Dipole', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('dipole_cross_sections.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+Ex = em_sys.E[X].get_data()
+Ey = em_sys.E[Y].get_data()
+Ez = em_sys.E[Z].get_data()
+Bx = em_sys.B[X].get_data()
+By = em_sys.B[Y].get_data()
+Bz = em_sys.B[Z].get_data()
+plot_final_state([Ez, Bx, By], x_vals, y_vals)
+plot_field_along_axes([Ez, Bx, By], x_vals, y_vals, x0=0.0, y0=0.0)
 
 if save_data:
 
