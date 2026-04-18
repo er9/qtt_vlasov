@@ -711,7 +711,7 @@ class Maxwell(PDE_system):
         return state1
 
 
-    def lax_wendroff(self, dt, inplace=False, compress_level=1,
+    def lax_wendroff(self, dt, inplace=False, compress_level=1, compress1=4,
                      **kwargs):
         """
         A^2 = c^2 * diag(0, 1, 1, 0, 1, 1)
@@ -918,14 +918,14 @@ class Maxwell(PDE_system):
         # print('ddt source', ddt_source.components)
 
         out_E = self.E if inplace else self.E.copy()
-        out_E.add(self.E.create_like(flux_E_tot), inplace=True)   ## dt/dx already included
-        out_E.add(self.E.create_like(cross_E_tot), inplace=True)   ## dt/dx already included
-        out_E.add(source, inplace=True)     ## -dt already included
-        out_E.add(ddt_source, inplace=True)   ## dt already included
+        out_E.add(self.E.create_like(flux_E_tot), inplace=True, compress_level=compress1)   ## dt/dx already included
+        out_E.add(self.E.create_like(cross_E_tot), inplace=True, compress_level=compress1)   ## dt/dx already included
+        out_E.add(source, inplace=True, compress_level=compress1)     ## -dt already included
+        out_E.add(ddt_source, inplace=True, compress_level=compress1)   ## dt already included
 
         out_B = self.B if inplace else self.B.copy()
-        out_B.add(self.B.create_like(flux_B_tot), inplace=True)  ## dt/dx already included
-        out_B.add(self.B.create_like(cross_B_tot), inplace=True)  ## dt/dx already included
+        out_B.add(self.B.create_like(flux_B_tot), inplace=True, compress_level=compress1)  ## dt/dx already included
+        out_B.add(self.B.create_like(cross_B_tot), inplace=True, compress_level=compress1)  ## dt/dx already included
 
         # print('out_E', out_E.components)
         # print('out B', out_B.components)
