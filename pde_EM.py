@@ -556,7 +556,7 @@ class Maxwell(PDE_system):
             state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
         elif self.te_order==2:
             if self.upwind:
-                state_t = self.lax_wendroff(dt)
+                state_t = self.lax_wendroff(dt, inplace=inplace, compress_level=compress_level)
             else:
                 state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
         elif self.te_order==3:
@@ -711,7 +711,7 @@ class Maxwell(PDE_system):
         return state1
 
 
-    def lax_wendroff(self, dt, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+    def lax_wendroff(self, dt, inplace=False, compress_level=1,
                      **kwargs):
         """
         A^2 = c^2 * diag(0, 1, 1, 0, 1, 1)
@@ -921,16 +921,33 @@ class Maxwell(PDE_system):
         out_E.add(self.E.create_like(flux_E_tot), inplace=True)   ## dt/dx already included
         out_E.add(self.E.create_like(cross_E_tot), inplace=True)   ## dt/dx already included
         out_E.add(source, inplace=True)     ## -dt already included
-        out_E.add(ddt_source, compress_level=1, inplace=True)   ## dt already included
+        out_E.add(ddt_source, inplace=True)   ## dt already included
 
         out_B = self.B if inplace else self.B.copy()
         out_B.add(self.B.create_like(flux_B_tot), inplace=True)  ## dt/dx already included
-        out_B.add(self.B.create_like(cross_B_tot), inplace=True, compress_level=1)  ## dt/dx already included
+        out_B.add(self.B.create_like(cross_B_tot), inplace=True)  ## dt/dx already included
 
         # print('out_E', out_E.components)
         # print('out B', out_B.components)
 
         # pdb.set_trace()
+
+        print('pre compress ranks')
+        for k, comp in out_E.components.items():
+            print('k', k, 'rank', comp.max_bond())
+            comp.info['internal_rank'] = comp.max_bond()
+
+        for k, comp in out_B.components.items():
+            print('k', k, 'rank', comp.max_bond())
+            comp.info['internal_rank'] = comp.max_bond()
+
+        if compress_level > 0:
+            out_E.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
+                            use_rdm=False)
+            out_B.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
+                           use_rdm=False)
+
+        print('end compress')
 
         if inplace:
             return self

@@ -138,7 +138,7 @@ if use_cfl:
     cfl = flags.get('cfl', 0.9)
 order = 1
 te_order = flags.get('te_order_EM', 1 if upwind else 31)
-upwind = True if te_order == 1 else upwind
+upwind = True if te_order in [1,2] else upwind
 
 ## restart from an saved state
 load_nt = restart_from_nt
