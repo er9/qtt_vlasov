@@ -267,7 +267,11 @@ class DMRGEvaluator(LocalEvaluator):
         else:
             raise ValueError
 
-        current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # print('update current x def -> copy (local dmrg eval)')
+        current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds]).copy()
+        # print('old current x')
+        # current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # print('test 2 current x')
         # if site_tens is None:
         #     current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
         # else:
@@ -310,6 +314,8 @@ class DMRGEvaluator(LocalEvaluator):
                     site_norm = site_tens.norm()
                     for t in target_list:
                         t.modify(apply=lambda x: x * site_norm / t.norm())
+                    target_rdm_list += [site_tens]
+                    print('add site tens to target rdm list (local dmrg eval)')
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
             tot_site = self.combine_terms_func(eval_tens_list)

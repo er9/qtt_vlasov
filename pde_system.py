@@ -678,7 +678,6 @@ class PDE_system:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
                 try:
-                    raise ValueError
                     state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                                   verbose_plot=verbose_plot, )
@@ -1295,19 +1294,49 @@ class PDE_system:
         # comp5 = 0
 
         print('get euler 1')
+        print('deriv 0')
+        try:
+            print(deriv0.fe.max_bond())
+            print(deriv0.E.max_bonds())
+            print(deriv0.B.max_bonds())
+        except:
+            pass
+        for k, fld in deriv0._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
         state1 = state0.euler(dt * 0.5, deriv0=deriv0, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
         # print('state1 fe diff', helper_quimb.distance(state1.fe.component.data, state0.fe.component.data))
         # print('state1 fi diff', helper.distance(state1.fi.component.data, state0.fi.component.data))
         # print('state1 V diff', helper.distance(state1.V.component.data, state0.V.component.data))
 
-        print('deriv1', state1)
+        print('state 1',)
+        try:
+            print(state1.fe.max_bond())
+            print(state1.E.max_bonds())
+            print(state1.B.max_bonds())
+        except:
+            pass
+        for k, fld in state1._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
+        print('deriv1')
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   compress_level2=comp5, update_force=False,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
         # print('deriv1 fe diff', helper_quimb.norm(deriv1.fe.component.data))
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
+        print('deriv 1',)
+        try:
+            print(deriv1.fe.max_bond())
+            print(deriv1.E.max_bonds())
+            print(deriv1.B.max_bonds())
+        except:
+            pass
+        for k, fld in deriv1._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
         print('get euler 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
@@ -1315,6 +1344,16 @@ class PDE_system:
         # print('state2 fi diff', helper.distance(state2.fi.component.data, state0.fi.component.data))
         # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))
 
+        print('state2',)
+        try:
+            print(state2.fe.max_bond())
+            print(state2.e.max_bonds())
+            print(state2.b.max_bonds())
+        except:
+            pass
+        for k, fld in state2._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
         print('deriv2', state2)
         deriv2 = state2.calculate_time_derivative(time=time1, update_force=False,
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
@@ -1323,6 +1362,16 @@ class PDE_system:
         # print('deriv2 fe diff', helper_quimb.norm(deriv2.fe.component.data))
         # print('deriv2 fi diff', deriv2.fi.component.norm())
 
+        print('deriv2',)
+        try:
+            print(deriv2.fe.max_bond())
+            print(deriv2.e.max_bonds())
+            print(deriv2.b.max_bonds())
+        except:
+            pass
+        for k, fld in deriv2._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
         print('state 3')
         state3 = state0.euler(dt, deriv0=deriv2, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
@@ -1330,10 +1379,31 @@ class PDE_system:
         # print('state3 fi diff', helper.distance(state3.fi.component.data, state0.fi.component.data))
         # print('state3 V diff', helper.distance(state3.V.component.data, state0.V.component.data))
 
+        print('state3',)
+        try:
+            print(state3.fe.max_bond())
+            print(state3.e.max_bonds())
+            print(state3.b.max_bonds())
+        except:
+            pass
+        for k, fld in state3._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
+
         print('deriv3')
         deriv3 = state3.calculate_time_derivative(time=time2, update_force=False,
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
+        print('deriv3',)
+        try:
+            print(deriv3.fe.max_bond())
+            print(deriv3.e.max_bonds())
+            print(deriv3.b.max_bonds())
+        except:
+            pass
+        for k, fld in deriv3._fields.items():
+            if fld is not None:
+                print(k, fld.max_bonds())
 
         # print('deriv3 fe diff', helper_quimb.norm(deriv3.fe.component.data))
         # print('deriv3 fi diff', deriv3.fi.component.norm())

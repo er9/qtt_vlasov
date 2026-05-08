@@ -928,7 +928,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                   dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        # print('RK4 DT', dt, left_site_pos, nsites, time)
+        print('RK4 DT', dt, left_site_pos, nsites, time)
 
         # print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:
@@ -1766,12 +1766,12 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
 
         x_ind = self.out.bond(i, i + direction)
         left_inds = [ind for ind in self.out[i].inds if ind != x_ind]
-        # q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
-        #                         cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
-        #                         bond_ind=x_ind)
-        q, r = helper_dmrg.tensor_svd(site_i, left_inds, absorb='right', max_bond=self.max_bond,
-                                      cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
-                                      bond_ind=x_ind)
+        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+                                cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
+                                bond_ind=x_ind)
+        # q, r = helper_dmrg.tensor_svd(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+        #                               cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
+        #                               bond_ind=x_ind)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         q.transpose_like(self.out[i], inplace=True)

@@ -484,7 +484,7 @@ class GridTN:
     #     raise NotImplementedError
 
     # @profile
-    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress_type=CompressType.SVD,
+    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=True, compress_type=CompressType.SVD,
                            compress=False, compress_opts=None, sub_compress_opts=None, add_cc=False) -> 'GridTN':
         ### changed add_cc default from True to False
 

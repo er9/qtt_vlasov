@@ -49,8 +49,17 @@ print('evolve ion', evolve_ion)
 print('branch', branch)
 print('dissipation', dissipation)
 
+te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250807)  # 250314)
+    if te_order == 344:
+        dnum = flags.get('dnum', 250923)  # 250314)
+    else:
+        dnum = flags.get('dnum', '250923_test')  # 250314)
+        dnum = flags.get('dnum', '250923_test2')  # 250314)
+        dnum = flags.get('dnum', '250923_test3')  # 250314)
+    # dnum = flags.get('dnum', '250923_test4')  # same as test
+    # dnum = flags.get('dnum', '250923_test5')  # no direction switching at each time step
     extra_str = 'ion' if evolve_ion else 'no-ion'
     if dissipation is not None:
         extra_str += f'_eta{dissipation}'
@@ -272,7 +281,7 @@ grid_idx = 2
 
 DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
-comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+comp_style = 1  # 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
 print('cutoff', cutoff)
 if cutoff == 'max':

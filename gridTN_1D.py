@@ -2432,6 +2432,7 @@ class GridTN1D(GridTN):
 
             print('local tdvp new', solver.dt, 'per sweep')
             nsites = 2 if max_bond is None else (3 if do_adapt else 1)
+            print('nsites', nsites)
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')
@@ -2562,7 +2563,7 @@ class GridTN1D(GridTN):
             # # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # gtn.data = solver.out
 
-        print('dist mpx max bond', gtn.data.max_bond())
+        print('dist mpx max bond', gtn.data.max_bond(), helper.inner_bond_sizes(gtn.data))
         gtn.compress(inplace=True, compress_opts={**compress_config.get_compress_opts(1), 'form': 'left'},
                      canonize=True)    ## bec cur orthog is at i=0 after r2l sweep
 
