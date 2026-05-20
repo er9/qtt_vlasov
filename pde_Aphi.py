@@ -702,7 +702,7 @@ class VectorPotential(PDE_system):
 
         ### build single MPS
         index_order = list(np.ndindex(7, 7))
-        curl_op = self.grid_X.build_indexed_gtn(all_mpos, index_order=index_order)
+        curl_op = self.grid_X.build_indexed_gtn(all_mpos, index_order=index_order, max_index=7)
         return curl_op
 
     def get_num_active_fields(self) -> int:
@@ -764,9 +764,9 @@ class VectorPotential(PDE_system):
         if j is not None:
             j = j.copy()
             if self.matl_params.is_cgs:
-                j.scalar_multiply(-4 * np.pi, inplace=True)
+                j.scalar_multiply(4 * np.pi, inplace=True)
             else:
-                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+                j.scalar_multiply(1 / self.matl_params.eps0, inplace=True)
 
         ### dmrg method
         if use_dmrg:
@@ -933,9 +933,9 @@ class VectorPotential(PDE_system):
         if j is not None:
             j = j.copy()
             if self.matl_params.is_cgs:
-                j.scalar_multiply(-4 * np.pi, inplace=True)
+                j.scalar_multiply(4 * np.pi, inplace=True)
             else:
-                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+                j.scalar_multiply(1 / self.matl_params.eps0, inplace=True)
 
         ### dmrg method
         print("HERE, EM USE BLOCK DMRG")
@@ -1162,9 +1162,9 @@ class VectorPotential(PDE_system):
         if j is not None:
             j = j.copy()
             if self.matl_params.is_cgs:
-                j.scalar_multiply(-4 * np.pi, inplace=True)
+                j.scalar_multiply(4 * np.pi, inplace=True)
             else:
-                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+                j.scalar_multiply(1 / self.matl_params.eps0, inplace=True)
 
         ### dmrg method
         print(f"HERE, EM USE BLOCK TDDMRG, do cross {do_cross}")

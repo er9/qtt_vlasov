@@ -676,7 +676,13 @@ class Grid1D(Grid):
         # print('num inds', num_inds, num_items)
         # ind_tens = np.zeros((num_inds, num_inds))
 
-        ref_key = next(iter(dict_gtns.keys()))
+        # ref_key = next(iter(dict_gtns.keys()))
+        ref_key = next((x for x in iter(dict_gtns.keys())
+                        if (dict_gtns[x] is not None and dict_gtns[x].data is not None)),
+                       None)
+        if ref_key is None:
+            return None
+
         ref_gtn = dict_gtns[ref_key]
         ndim = (1 if isinstance(ref_key, int) else len(ref_key))
         if ndim == 1:
@@ -708,7 +714,7 @@ class Grid1D(Grid):
                 ref_inds = tens0.inds
             else:
                 if tens0.inds != ref_inds:
-                    gtn.modify(data=scipy.sparse.swapaxes(tens0.data), inds=ref_inds)
+                    tens0.modify(data=tens0.data.transpose(), inds=ref_inds)
                 # print('gtn data', gtn.data[0])
                 # print('ref inds', ref_inds)
 
@@ -725,7 +731,7 @@ class Grid1D(Grid):
         else:
             raise ValueError
         new_tn = qtn.TensorNetwork( [qtn.Tensor(data=new_data, inds=ref_inds, tags=ref_tags)] )
-        new_tn.view_like(gtn.data, inplace=True)
+        new_tn.view_like(gtn.data, inplace=True, site_tag_id=next(iter(ref_tags)))
         new_gtn = gtn.grid.make_gridTN(new_tn)
         return new_gtn
 

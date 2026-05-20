@@ -217,7 +217,6 @@ if use_cfl:
     dt = dt_cfl * cfl if dt is None else dt
     # print('dt', dt, cfl * 1. / (c / ax_x.dx + c / ax_y.dx) )
     print('dt', dt, cfl * 1. / (c * np.sqrt(1.0 / dx ** 2 + 1.0 / dy ** 2)))
-dt = 0.02469136
 num_tsteps = int(np.ceil(T/dt))
 print('dt', dt, num_tsteps, )
 print('1/omega', 1 / omega)
