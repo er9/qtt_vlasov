@@ -1,4 +1,5 @@
 from setup_.configs import *
+import helper_quimb
 
 from coord.coord_sys import Coordinate
 from coord.coord_sys import CoordinateSystem
@@ -87,13 +88,22 @@ class CartesianCoordinateSpace(CoordinateSystem):
 
 
     def build_laplacian_mpo(self, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration'],
-                            eeo_grid: bool = False) \
+                            eeo_grid: bool = False, remove_dx2=False,) \
             -> list[dict['Axis', MPOType]]:
         """ obtain MPO taking Laplacain over specified axes
         """
         mpo_list = []
         for ax in axes:
             out = ax.build_secondderivative_mpo(deriv_configs[ax], eeo_grid=eeo_grid)
+
+            if remove_dx2:
+                if ax.basis.type == BasisType.FOURIER:
+                    helper_quimb.scalar_multiply(out, (1/ax.dx)**2, inplace=True)
+                elif ax.basis.type == BasisType.SPATIAL:
+                    helper_quimb.scalar_multiply(out, ax.dx**2, inplace=True)
+                else:
+                    raise NotImplementedError
+
             mpo_list += [{ax: out}]
         return mpo_list
 

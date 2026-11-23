@@ -695,7 +695,7 @@ class GridTN:
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
-    def add_dissipation(self, strength: Numeric, deriv_order: int=2, inplace=False,
+    def add_dissipation(self, strength: Numeric, deriv_axes=None, deriv_order: int=2, inplace=False,
                         compress=True, compress_opts:dict = None, verbose_plot=False):
         """
         Euler time step of dissipation:  f = f + eta d^m/dx^m f = (1 + eta d^m/dx^m) f
@@ -715,8 +715,14 @@ class GridTN:
             v.update(order=1, fd_type=FDType.CENTER)
 
         # old = self.copy()
-        dissip_f = self.take_mth_laplacian(deriv_order, ax_deriv_configs=ax_deriv_configs, remove_dx2=True)
+        dissip_f = self.take_mth_laplacian(deriv_order, deriv_axes=deriv_axes,
+                                           ax_deriv_configs=ax_deriv_configs, remove_dx2=True)
         dissip_f = dissip_f.scalar_multiply(strength, inplace=True)
+
+        # print('self norm', self.frobenius_norm())
+        # print('deriv axes', deriv_axes, deriv_order)
+        # print('dissip self norm', dissip_f.frobenius_norm())
+
         # out1 = self.add(dissip_f, inplace=inplace, compress=compress) # , compress_opts=compress_opts)
         out = self.add(dissip_f, inplace=inplace, compress=compress, compress_opts=compress_opts)
         # if old.data is not None:
@@ -1060,45 +1066,45 @@ class GridTN:
         gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
-    def take_mth_laplacian(self, deriv_order: int, deriv_axes=None, coord_sys: 'CoordinateSystem'=None,
-                           ax_deriv_configs: dict['Axis': 'DerivativeConfiguration'] = None, remove_dx2=False,
-                           recalc=False, inplace=False, compress=False, compress_opts=None
-                           ) -> 'GridTN':
-        """ compute d^m/dx^m f along all deriv_axes (valid for even m)
-        """
-
-        if coord_sys is not None:
-            mpo_list = coord_sys.build_mth_laplacian_mpo(deriv_order, axes=deriv_axes,
-                                                         deriv_configs=self.ax_deriv_configs,)
-            raise NotImplementedError
-
-        if ax_deriv_configs is None:
-            ax_deriv_configs = self.ax_deriv_configs
-
-        if deriv_axes is None:
-            deriv_axes = self.grid.axes
-
-        out_mps = None
-        for ax in deriv_axes:
-            out = self.take_mth_derivative(deriv_order, ax, deriv_config=ax_deriv_configs[ax])
-            if remove_dx2:
-                if ax.basis.type == BasisType.FOURIER:
-                    dx2_coeff = (1. / np.abs(ax.xpts[0]))**deriv_order
-                elif ax.basis.type == BasisType.SPATIAL:
-                    dx2_coeff = ax.dx**deriv_order
-                else:
-                    raise NotImplementedError
-                out.scalar_multiply(dx2_coeff, inplace=True)
-
-            if out_mps is None:
-                out_mps = out
-            else:
-                out_mps = out_mps.add(out, inplace=True, compress=False)
-
-        if compress and out_mps is not None:
-            out_mps = out_mps.compress(compress_opts=compress_opts, inplace=True)
-
-        return out_mps
+    # def take_mth_laplacian(self, deriv_order: int, deriv_axes=None, coord_sys: 'CoordinateSystem'=None,
+    #                        ax_deriv_configs: dict['Axis': 'DerivativeConfiguration'] = None, remove_dx2=False,
+    #                        recalc=False, inplace=False, compress=False, compress_opts=None
+    #                        ) -> 'GridTN':
+    #     """ compute d^m/dx^m f along all deriv_axes (valid for even m)
+    #     """
+    #
+    #     if coord_sys is not None:
+    #         mpo_list = coord_sys.build_mth_laplacian_mpo(deriv_order, axes=deriv_axes,
+    #                                                      deriv_configs=self.ax_deriv_configs,)
+    #         raise NotImplementedError
+    #
+    #     if ax_deriv_configs is None:
+    #         ax_deriv_configs = self.ax_deriv_configs
+    #
+    #     if deriv_axes is None:
+    #         deriv_axes = self.grid.axes
+    #
+    #     out_mps = None
+    #     for ax in deriv_axes:
+    #         out = self.take_mth_derivative(deriv_order, ax, deriv_config=ax_deriv_configs[ax])
+    #         if remove_dx2:
+    #             if ax.basis.type == BasisType.FOURIER:
+    #                 dx2_coeff = (1. / np.abs(ax.xpts[0]))**deriv_order
+    #             elif ax.basis.type == BasisType.SPATIAL:
+    #                 dx2_coeff = ax.dx**deriv_order
+    #             else:
+    #                 raise NotImplementedError
+    #             out.scalar_multiply(dx2_coeff, inplace=True)
+    #
+    #         if out_mps is None:
+    #             out_mps = out
+    #         else:
+    #             out_mps = out_mps.add(out, inplace=True, compress=False)
+    #
+    #     if compress and out_mps is not None:
+    #         out_mps = out_mps.compress(compress_opts=compress_opts, inplace=True)
+    #
+    #     return out_mps
 
 
     # def take_mth_laplacian(self, deriv_order: 'int', axes: Sequence['Axis']=None,
@@ -1116,6 +1122,29 @@ class GridTN:
     #     gtn = self.apply(d2_mpo, inplace=False, compress=compress, compress_opts=compress_opts)
     #
     #     return gtn
+
+    def take_mth_laplacian(self, deriv_order: int, deriv_axes=None, coord_sys: 'CoordinateSystem'=None,
+                           ax_deriv_configs: dict['Axis': 'DerivativeConfiguration'] = None, remove_dx2=False,
+                           recalc=False, inplace=False, compress=False, compress_opts=None
+                           ) -> 'GridTN':
+        """ take (d^2/dx^2)^(m//2) f (valid for even m)
+        """
+        # print('in new mth laplacian')
+
+        if ax_deriv_configs is None:
+            ax_deriv_configs = self.ax_deriv_configs
+
+        if deriv_axes is None:
+            deriv_axes = self.grid.axes
+
+        out_mps = self if inplace else self.copy()
+
+        m_lapl_mpo = self.grid.mth_laplacian_mpo(deriv_order, axes=deriv_axes,
+                                                 ax_deriv_configs=ax_deriv_configs,
+                                                 remove_dx2=remove_dx2)
+
+        out_mps.apply(m_lapl_mpo, zipup=True, inplace=True, compress=True, compress_opts=compress_opts)
+        return out_mps
 
 
     def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex: dict[str, str] = None,

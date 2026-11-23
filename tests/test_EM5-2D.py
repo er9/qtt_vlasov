@@ -2,7 +2,7 @@ import pdb
 
 import numpy as np
 import os, sys, time, glob
-sys.path.append('../')
+sys.path = ['../'] + sys.path
 import matplotlib
 
 from setup_.paths import save_dir, main_dir
@@ -38,8 +38,8 @@ restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 do_tt = flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
 do_full = flags.get('do_full', False)
 dissipation = flags.get('dissipation', 0.0)
-deriv_order = flags.get('deriv_order', 2)
-comp_style = flags.get('comp_style', 1)
+deriv_order = flags.get('deriv_order', 6)
+comp_style = flags.get('comp_style', 2)
 run = flags.get('branch', 2)
 
 clean = False  # True
@@ -242,10 +242,10 @@ if dissipation == 'max':
     dissipation = np.sqrt(cutoff) * np.sqrt(L * 2)
     print('(max) dissipation per time step', dissipation)
 elif dissipation == 'fv':
-    dissipation = ax_x.dx * dt
+    dissipation = ax_x.dx * dt / 2
     print('(fv) dissipation per time step', dissipation)
 else:
-    dissipation = dissipation * dt
+    dissipation = dissipation * dt / 2
 
 ## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
@@ -348,7 +348,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
 
 while nt < num_tsteps:
 
-    dt_ = dt if nt==0 else dt
+    dt_ = dt/2 if nt==0 else dt
     print('dt_', dt, 't', ts[-1])
     time1 = time.time()
 
@@ -364,6 +364,9 @@ while nt < num_tsteps:
     pre_dissip_E_bonds = [em_sys.E.max_bond(C) for C in [X, Y, Z]]
     pre_dissip_B_bonds = [em_sys.B.max_bond(C) for C in [X, Y, Z]]
     print('pre dissip max bond', pre_dissip_E_bonds, pre_dissip_B_bonds)
+
+    print('E norms', em_sys.E.frobenius_norms())
+    print('B norms', em_sys.B.frobenius_norms())
 
     # print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     # print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))

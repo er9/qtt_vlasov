@@ -1575,7 +1575,8 @@ class Grid:
 
     def laplacian_mpo(self, axes: Sequence['Axis'] = None,
                       ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
-                      compID=None, recalc=False, store=True, eeo_grid=False) -> 'GTN_TYPE':
+                      compID=None, recalc=False, store=True, eeo_grid=False,
+                      remove_dx2=False,) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
         """
@@ -1588,7 +1589,7 @@ class Grid:
         # axIDs = [ax.axID for ax in axes]
         try:
             if recalc:  raise KeyError
-            return self._mpo_laplacian[frozenset(axes)].copy()
+            return self._mpo_laplacian[(frozenset(axes), remove_dx2)].copy()
 
         except KeyError:
             mpo_list = []
@@ -1596,17 +1597,56 @@ class Grid:
                 coord_sys = ax.coord_sys  ## axes can be in different coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 if compID is None:
-                    # print('type coord', coord_sys)
-                    mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs, eeo_grid=eeo_grid)
+                    mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs, eeo_grid=eeo_grid,
+                                                              remove_dx2=remove_dx2)
                 else:
                     mpo_list += coord_sys.build_vector_laplacian_mpo(compID, [ax], ax_deriv_configs)
                 # print('mpo list', ax, mpo_list[-1][ax])
 
             gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO)
 
-            if compID is None and store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
+            if compID is None and store:   self._mpo_laplacian[(frozenset(axes), remove_dx2)] = gtn_mpo
             # print('laplacian mpo', gtn_mpo)
             return gtn_mpo.copy()
+
+
+    def mth_laplacian_mpo(self, deriv_order: int, axes: Sequence['Axis'] = None,
+                          ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
+                          compID=None, recalc=False, store=True, eeo_grid=False,
+                          remove_dx2=False) -> 'GTN_TYPE':
+
+        """ L(f) = lapl^(m//2) f
+            mps_scalar_field:  mps representing the scalar field
+        """
+        if axes is None:
+            axes = self.axes
+
+        if ax_deriv_configs is None:
+            ax_deriv_configs = {ax: DerivativeConfiguration() for ax in axes}
+
+        # axIDs = [ax.axID for ax in axes]
+        try:
+            if recalc:  raise KeyError
+            return self._mpo_laplacian[(frozenset(axes), deriv_order, remove_dx2)].copy()
+
+        except KeyError:
+
+            lapl_mpo = self.laplacian_mpo(axes, ax_deriv_configs, compID=compID,
+                                          recalc=recalc, store=store, eeo_grid=eeo_grid,
+                                          remove_dx2=remove_dx2)
+
+            m_lapl_mpo = lapl_mpo.copy()
+            for it in range(deriv_order // 2 - 1):
+                m_lapl_mpo = lapl_mpo.apply(m_lapl_mpo, compress=False)
+
+            m_lapl_mpo.compress()
+
+            if (deriv_order // 2) % 2 == 0:
+                m_lapl_mpo.scalar_multiply(-1, inplace=True)
+
+            if store:   self._mpo_laplacian[(frozenset(axes), deriv_order, remove_dx2)] = m_lapl_mpo
+
+            return m_lapl_mpo.copy()
 
     def inverse_laplacian_mpo(self, axes: Sequence['Axis'] = None, boundary_conditions=None,
                               ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,

@@ -75,6 +75,7 @@ def _set_args(argv):
                                 "fdir_iden=",           # fdir identifying string/number
                                 "no_evolve_ion",        # evolve_ion=False
                                 "dissipation=", # amount of dissipation (eta)
+                                "deriv_order=", # dissipation derivative
                                 "upwind",       # do upwind (if not specified by te_order)
                                 ] )
     print('in func')
@@ -132,6 +133,8 @@ def _set_args(argv):
                 flags['dissipation'] = arg
             else:
                 flags['dissipation'] = float(arg)
+        elif opt in ('--deriv_order',):
+            flags['deriv_order'] = int(arg)
         elif opt in ('-s', '--sqrt'):
             # assert (isinstance(arg, bool), f'is_sqrt argument should be bool, not {type(arg)}')
             flags['is_sqrt'] = True
