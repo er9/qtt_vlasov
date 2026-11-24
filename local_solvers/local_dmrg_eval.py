@@ -66,6 +66,10 @@ def local_dmrg_evaluator(terms: Sequence['Term_DMRG'],
 
 class DMRGEvaluator(LocalEvaluator):
 
+    ## if True, use paper_whistler behavior in local site solve: scale proj targets to site_tens norm
+    ## and add site_tens to target_rdm_list. default False (full_vm behavior)
+    include_site_in_target_rdm = False
+
     @classmethod
     def term_class(cls) -> Type['Term_DMRG']:
         return Term_DMRG
@@ -267,7 +271,11 @@ class DMRGEvaluator(LocalEvaluator):
         else:
             raise ValueError
 
-        current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # print('update current x def -> copy (local dmrg eval)')
+        current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds]).copy()
+        # print('old current x')
+        # current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # print('test 2 current x')
         # if site_tens is None:
         #     current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
         # else:
@@ -307,10 +315,17 @@ class DMRGEvaluator(LocalEvaluator):
                     if term.vec_block.bra is self.out:
                         target_list = [t.copy() for t in term.proj_vec_targets]
                         ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
-                        for t in target_list:
-                            t.modify(apply=lambda x: x * 1.0 / t.norm())
-                        # target_rdm_list += [site_tens]
-                        target_rdm_list += target_list
+                        if self.include_site_in_target_rdm:
+                            ## paper_whistler version: scale targets to site norm, and include site_tens
+                            site_norm = site_tens.norm()
+                            for t in target_list:
+                                t.modify(apply=lambda x: x * site_norm / t.norm())
+                            target_rdm_list += target_list
+                            target_rdm_list += [site_tens]
+                        else:
+                            for t in target_list:
+                                t.modify(apply=lambda x: x * 1.0 / t.norm())
+                            target_rdm_list += target_list
 
                     eval_tens_list += [eval_site]
                 else:

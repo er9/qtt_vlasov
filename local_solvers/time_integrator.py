@@ -933,7 +933,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                   dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        # print('RK4 DT', dt, left_site_pos, nsites, time)
+        print('RK4 DT', dt, left_site_pos, nsites, time)
 
         # print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:

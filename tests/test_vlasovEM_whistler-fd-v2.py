@@ -49,8 +49,17 @@ print('evolve ion', evolve_ion)
 print('branch', branch)
 print('dissipation', dissipation)
 
+te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250807)  # 250314)
+    if te_order == 344:
+        dnum = flags.get('dnum', 250923)  # 250314)
+    else:
+        dnum = flags.get('dnum', '250923_test')  # 250314)
+        dnum = flags.get('dnum', '250923_test2')  # 250314)
+        dnum = flags.get('dnum', '250923_test3')  # 250314)
+    # dnum = flags.get('dnum', '250923_test4')  # same as test
+    # dnum = flags.get('dnum', '250923_test5')  # no direction switching at each time step
     extra_str = 'ion' if evolve_ion else 'no-ion'
     if dissipation is not None:
         extra_str += f'_eta{dissipation}'
@@ -272,7 +281,7 @@ grid_idx = 2
 
 DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
-comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+comp_style = 1  # 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
 print('cutoff', cutoff)
 if cutoff == 'max':
@@ -302,8 +311,7 @@ v_map_key = flags.get('v_map_key', 'B')
 
 save_every_nt = flags.get('save_every_nt', 100)
 
-# upwind = True if te_order in [1, 3, 66, 68, 69, 86, 88, 89] else False
-upwind = flags.get('do_upwind', False)
+upwind = True if te_order in [1, 3, 66, 68, 69, 86, 88, 89] else False
 upwind_EM = False  # True
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
@@ -775,8 +783,8 @@ while ts[-1] < T:
         ## so that we get desired dissipation (sqrt(cutoff)) per time step
 
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=use_rk4,)
-                                   # direction=(1 if nt % 2 == 0 else -1))
+                                   is_first_time_step=use_rk4,
+                                   direction=(1 if nt % 2 == 0 else -1))
 
     # if dissipation:   ## or include this after during split step, eg?
     #     vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_e)
@@ -850,13 +858,6 @@ while ts[-1] < T:
 
     if nt % (save_every_nt ) == 0:
 
-        plt.figure()
-        plt.plot(ts, max_bond_fe)
-        plt.xlabel('t')
-        plt.ylabel('rank')
-        plt.show()
-
-        print('HERE')
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
@@ -1001,25 +1002,6 @@ while ts[-1] < T:
             B_mag = mu0 * charge * n0_e * A / dk
             plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
             plt.title('B')
-            plt.legend()
-
-            plt.figure()
-            Jx_data = J_field.get_comp_data(X)
-            if Jx_data is not None and np.all(Jx_data != 0):
-                Jx_data = ax_x.basis.get_realspace_1D(Jx_data, 0)
-                plt.plot(real_xs, np.real(Jx_data), label='Bx field real')
-                plt.plot(real_xs, np.imag(Jx_data), '--', label='Bx field imag')
-            Jy_data = J_field.get_comp_data(Y)
-            if np.all(Jy_data != 0):
-                Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
-                plt.plot(real_xs, np.real(Jy_data), label='By field real')
-                plt.plot(real_xs, np.imag(Jy_data), '--', label='By field imag')
-            Jz_data = J_field.get_comp_data(Z)
-            if np.all(Jz_data != 0):
-                Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
-                plt.plot(real_xs, np.real(Jz_data), label='Bz field real')
-                plt.plot(real_xs, np.imag(Jz_data), '--', label='Bz field imag')
-            plt.title('J')
             plt.legend()
 
             if not save_figs:
